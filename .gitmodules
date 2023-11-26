@@ -1,0 +1,9 @@
+[submodule "LibStatArb"]
+	path = LibStatArb
+	url = git@github.com:LMerkin/LibStatArb.git
+[submodule "MAQUETTE-Core"]
+	path = MAQUETTE-Core
+	url = git@github.com:LMerkin/MAQUETTE-Core.git
+[submodule "MAQUETTE-Strats"]
+	path = MAQUETTE-Strats
+	url = git@github.com:LMerkin/MAQUETTE-Strats.git
