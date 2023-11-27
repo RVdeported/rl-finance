@@ -1,5 +1,6 @@
 using Pkg
 Pkg.activate("../alp")
+Pkg.add("CUDA")
 using ProgressBars
 using Flux, CUDA, DataFrames
 using StatsBase
@@ -8,15 +9,16 @@ using Setfield
 include("Env.jl")
 include("BaseTypes.jl")
 
-T = Float64
+T = Float32
 struct DQN
     target_model::Ref{Chain}
     value_model::Ref{Chain}
-    action_space::Vector{Tuple{T, T}} # ask and bid offset
+    action_space::Vector{Tuple{T, T}} # buy and sell offset
     eps_start::AbstractFloat
     eps_end::AbstractFloat
     eps_decay::Int
     rew_decay::AbstractFloat
+    reg_vol::AbstractFloat
     lr::AbstractFloat
     stats::Dict{String, Vector}
 end
@@ -25,12 +27,13 @@ end
 function init!(;
     in_feats::Int64,
     layers::Vector{Int64},
-    eps_start::T,
-    eps_end::T,
-    eps_decay::Int64,
-    rew_decay::T,
-    lr::T,
-    action_space::Vector{Tuple{T, T}}
+    action_space::Vector{Tuple{T, T}},
+    eps_start::AbstractFloat = 0.9,
+    eps_end::AbstractFloat   = 0.05,
+    eps_decay::Int64         = 10000,
+    rew_decay::AbstractFloat = 0.9,
+    reg_vol::AbstractFloat   = 15.0,
+    lr::AbstractFloat        = 1e-5
 )
     pushfirst!(layers, in_feats)
     first_L = Chain([Dense(layers[i], layers[i+1], relu; init=Flux.glorot_normal()) 
@@ -47,12 +50,14 @@ function init!(;
         eps_end,
         eps_decay,
         rew_decay,
+        reg_vol,
         lr,
         Dict(
             "loss" => [],
             "reward" => [],
             "no_actions" => [],
-            "vol_left" => []
+            "vol_left" => [],
+            "randoms" => []
         )
     )
     return dqn
@@ -120,9 +125,9 @@ function train_dqn(
             done(env) && break
             
             state_idx = env.last_point[]
-            state = get_state(env)
-            mid_px = state.midprice
-            state = cu(T[state...])
+            state_dr = get_state(env)
+            mid_px = state_dr.midprice
+            state = cu(T[state_dr...])
             
             policy = cpu(dqn.target_model[](state))
             if rand() > thr(dqn, global_step)
@@ -143,20 +148,19 @@ function train_dqn(
                 input_order(env, n)
             end
             
-            ex_res = execute!(env, step_, pred_idx == max_ep_len)
+            ex_res = execute!(env, env.w_size, pred_idx == max_ep_len)
             reward = ex_res.reward
-            print("$(get_state(env).PnL)|$(get_state(env).Vol)|$reward ||| ")
+            # print("$(get_state(env).PnL)|$(get_state(env).Vol)|$reward ||| ")
             push!(reward_arr, reward)
             step(env, step_)
 
             add_rm((state_idx, env.last_point[], action_idx, 0.0, 
-                    deepcopy([cpu(state)...]), deepcopy([get_state(env)...]),
+                    deepcopy([state_dr...]), deepcopy([get_state(env)...]),
                     ex_res.vol_left))
             # println("reward: $reward, acrion: $action_idx")
             # avg_reward += reward
             (pred_idx == max_ep_len - 1) && (vol_left = get_state(env).Vol)
         end
-        println("\n")
         avg_reward = reward_arr[end]
         size_rm = length(replay_memory)
         size_rew = length(reward_arr)
@@ -165,9 +169,7 @@ function train_dqn(
             @set! replay_memory[size_rm - size_rew + i][4] = T(rew_cumm)
             popfirst!(reward_arr)
         end
-        # avg_reward /= max_ep_len
-        
-        # vol_left /= max_ep_len
+
         set_description(bar, 
             string(@sprintf("Episode %i... randoms: %i, no_action: %i, avg reward: %.2f, avg vol: %.2f", 
             ep_idx, random_count, zero_count, avg_reward, vol_left)))
@@ -182,6 +184,7 @@ function train_dqn(
         push!(dqn.stats["loss"], loss)
         push!(dqn.stats["no_actions"], zero_count)
         push!(dqn.stats["vol_left"], vol_left)
+        push!(dqn.stats["randoms"], random_count)
         dqn.target_model[] = deepcopy(dqn.value_model[])
 
         if done(env)
@@ -203,11 +206,12 @@ function optimize(
     
     move(dqn, true, false)
 
-    next_states = [n[6] for n in rm_items]
-    next_states = cu.(next_states)
-    next_action_values = dqn.target_model[].(next_states)
-    next_action_values = [max(cpu(n)...) for n in next_action_values]
-    labels = [n[4] for n in rm_items] # + next_action_values
+    # next_states = [n[6] for n in rm_items]
+    # next_states = cu.(next_states)
+    # next_action_values = dqn.target_model[].(next_states)
+    # next_action_values = [max(cpu(n)...) for n in next_action_values]
+    Vol_id = findall( x -> occursin("Vol", x), names(get_state(env)))[1]
+    labels = [n[4] - abs(n[6][Vol_id]) * dqn.reg_vol for n in rm_items] # + next_action_values
     # labels = mapreduce(permutedims, vcat, labels)
     labels = cu(labels)
 
@@ -215,7 +219,7 @@ function optimize(
 
     move(dqn, false, true)
     
-    states = [n[5] for n in rm_items]
+    states = [[n[5]...] for n in rm_items]
     states = mapreduce(permutedims, vcat, states)
     states = cu(states)
     
@@ -257,6 +261,5 @@ function order_action(
         input_order(env, n)
     end
     
-
 end
 
