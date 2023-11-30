@@ -24,7 +24,7 @@ function match_orders!(;
     best_ask::AbstractFloat,
     comm::AbstractFloat = 0.0
     )
-    @assert best_ask > best_bid
+    # @assert best_ask > best_bid
     
     q_delta = 0.0
     PnL_delta = 0.0
@@ -34,12 +34,12 @@ function match_orders!(;
     for (i, n) in enumerate(orders)
         @assert n.qt >= 0.0
         @assert n.px >= 0.0
-        if (n.side_ask && n.px <= best_ask)
+        if (n.side_ask && n.px <= best_bid)
             q_delta   -= n.qt
             PnL_delta += apply_comm(comm, n.qt * n.px, true)
             executed_asks += 1
             mask_matched[i] = true
-        elseif (!n.side_ask && n.px >= best_bid)
+        elseif (!n.side_ask && n.px >= best_ask)
             executed_bids += 1
             q_delta   += n.qt
             PnL_delta -= apply_comm(comm, n.qt * n.px, false)

@@ -1,5 +1,5 @@
 path_df: ../data/roman_c1.csv
-trading_step: 500
+trading_step: 200
 window_step: 50
 train_start_idx: 1
 train_end_idx: 140000
@@ -7,61 +7,71 @@ test_start_idx: 160000
 test_end_idx: end
 commission: -0.0002
 
-eps_start:    0.9
-eps_end:      0.05
-eps_decay:    40000
-reward_decay: 0.9
-lr:           1e-4
-reg_vol:      30.0
+eps_start:     0.80
+eps_end:       0.05
+eps_decay:     5000
+reward_decay:  0.7
+lr:            1e-4
+reg_vol:       30.0
+warm_up_episodes: 100
+alpha:         0.9
+gamma:         0.5
+lr_decay:      0.9997
+gradient_clip: 1e-7
 actions:
+    - 0.1
     - 1.0
-    - 5.0
 layers: 
-    - 512
-    - 128
+    - 256
     - 32
+    # - 16
 
-episodes: 4000
+episodes: 10000
+merge_dqns_every: 10
+eval_every: 50
 max_episode_len: 10
-replay_memory_len: 512
-replay_batch: 32
+replay_memory_len: 1024
+replay_batch: 64
 
 exclude_cols:
     - "target"
     - "target_min"
     - "target_max" 
-    - "midprice_vwap_v220000.0"
-    - "vwap_midprice_diff_v220000.0"
-    - "midprice_vwap_v130000.0"
-    - "vwap_midprice_diff_v130000.0"
-    - "log_vwap_midprice_ratio_v220000.0"
-    - "nlrr_ws100"
-    - "nlrr_ws500" 
-    - "mean_trend_ws100_midprice"
-    - "std_trend_ws100_midprice"
-    - "vol_ws100_midprice"
-    - "mean_trend_ws500_midprice"
-    - "std_trend_ws500_midprice"
-    - "vol_ws500_midprice"
-    - "mean_trend_ws100_midprice_vwap_v130000.0"
-    - "std_trend_ws100_midprice_vwap_v130000.0"
-    - "vol_ws100_midprice_vwap_v130000.0"
-    - "mean_trend_ws500_midprice_vwap_v130000.0"
-    - "std_trend_ws500_midprice_vwap_v130000.0"
-    - "vol_ws500_midprice_vwap_v130000.0"
-    - "mean_trend_ws100_midprice_vwap_v220000.0"
-    - "std_trend_ws100_midprice_vwap_v220000.0"
-    - "vol_ws100_midprice_vwap_v220000.0"
-    - "mean_trend_ws500_midprice_vwap_v220000.0"
-    - "std_trend_ws500_midprice_vwap_v220000.0"
-    - "vol_ws500_midprice_vwap_v220000.0"
-    - "new_trend_value_ws100_midprice"
-    - "new_trend_value_ws100_midprice_vwap_v130000.0"
-    - "new_trend_value_ws100_midprice_vwap_v220000.0"
-    - "new_trend_value_ws500_midprice"
-    - "new_trend_value_ws500_midprice_vwap_v130000.0"
-    - "new_trend_value_ws500_midprice_vwap_v220000.0"
-    
+    # - "midprice_vwap_v220000.0"
+    # - "vwap_midprice_diff_v220000.0"
+    # - "midprice_vwap_v130000.0"
+    # - "vwap_midprice_diff_v130000.0"
+    # - "log_vwap_midprice_ratio_v220000.0"
+    # - "nlrr_ws100"
+    # - "nlrr_ws500" 
+    # - "mean_trend_ws100_midprice"
+    # - "std_trend_ws100_midprice"
+    # - "vol_ws100_midprice"
+    # - "mean_trend_ws500_midprice"
+    # - "std_trend_ws500_midprice"
+    # - "vol_ws500_midprice"
+    # - "mean_trend_ws100_midprice_vwap_v130000.0"
+    # - "std_trend_ws100_midprice_vwap_v130000.0"
+    # - "vol_ws100_midprice_vwap_v130000.0"
+    # - "mean_trend_ws500_midprice_vwap_v130000.0"
+    # - "std_trend_ws500_midprice_vwap_v130000.0"
+    # - "vol_ws500_midprice_vwap_v130000.0"
+    # - "mean_trend_ws100_midprice_vwap_v220000.0"
+    # - "std_trend_ws100_midprice_vwap_v220000.0"
+    # - "vol_ws100_midprice_vwap_v220000.0"
+    # - "mean_trend_ws500_midprice_vwap_v220000.0"
+    # - "std_trend_ws500_midprice_vwap_v220000.0"
+    # - "vol_ws500_midprice_vwap_v220000.0"
+    # - "new_trend_value_ws100_midprice"
+    # - "new_trend_value_ws100_midprice_vwap_v130000.0"
+    # - "new_trend_value_ws100_midprice_vwap_v220000.0"
+    # - "new_trend_value_ws500_midprice"
+    # - "new_trend_value_ws500_midprice_vwap_v130000.0"
+    # - "new_trend_value_ws500_midprice_vwap_v220000.0"
+    # - "mean_trend_ws2500_midprice_vwap_v130000.0"
+    # - "mean_trend_ws2500_midprice_vwap_v220000.0"
+    # - "std_trend_ws2500_midprice_vwap_v220000.0"
+    # - "vol_ws2500_midprice_vwap_v220000.0"
 
 
 

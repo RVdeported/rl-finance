@@ -1,10 +1,12 @@
 using Pkg
 Pkg.activate("../alp")
 
-using DataFrames, Dates, CSV
+using DataFrames, Dates, CSV, StatsBase
 include("BaseTypes.jl")
 
 FORMAT = dateformat"yyyy-mm-dd HH:MM:SS.sss"
+
+SCALER_TYPE = UnitRangeTransform
 
 #================================================================#
 # Env structure                                                  #
@@ -16,10 +18,13 @@ struct Env
     last_point::Ref{Int}     # last index of interest
     w_size::Int              # window of predictions
     real_feats::Vector{Int}  # ids of real features
+    feats_for_scale::Vector{Int}
+    feats_for_model::Vector{Int}
     date_feats::Vector{Int}  # id of date features in dataset
     commission::Float16      
     lat_ms::Int16            # NOT IMPLEMENTED latency simulation
     orders::Vector{Order}    # holder of currently placed orders
+    scaler::Union{SCALER_TYPE, Nothing}
 end
 
 # type of float in use
@@ -40,23 +45,26 @@ function init_env!(
     w_size::Int = 400,
     commission::AbstractFloat = -0.0002,
     lat_ms::Int = 60,
-    exclude_cols::Vector{String} = []
+    exclude_cols::Vector{String} = [],
+    scaler::Union{SCALER_TYPE, Nothing} = nothing
     )
-    env = Env(df, 1, w_size, [], [], commission, lat_ms, [])
-    names_ = names(env.data)
-
+    
+    names_ = names(df)
+    date_feats = Vector{Int}()
+    real_feats = Vector{Int}()
     # we need to look through all columns and distribute them among 
     # real features, date features and non-real values
-    for (i, n) in enumerate(eltype.(eachcol(env.data))) 
+    for (i, n) in enumerate(eltype.(eachcol(df))) 
         if names_[i] in exclude_cols
             continue
         elseif n <: Int
-            push!(env.date_feats, i)
+            push!(date_feats, i)
         elseif n <: AbstractFloat
-            push!(env.real_feats, i)
+            push!(real_feats, i)
             df[!,i:i] = convert.(T,df[!, i:i])
         end
     end
+
 
     @assert ("o_ask_px_1" in names_) && 
             ("o_bid_px_1" in names_) && 
@@ -64,7 +72,17 @@ function init_env!(
             ("midprice"   in names_)
 
     # adding features for trade statistics
-    add_features!(env)
+    feats_for_scale = deepcopy(real_feats)
+    len_original = ncol(df)
+    add_features!(df, real_feats)
+    isnothing(scaler) && (scaler = fit(SCALER_TYPE, Matrix(df[:, feats_for_scale]), dims=1))
+    feats_not_for_scale = symdiff(real_feats, feats_for_scale)
+    scaled = StatsBase.transform(scaler, Matrix(df[:, feats_for_scale]))
+    scaled = DataFrame(scaled, ["scaled_"*n for n in names(df[1:1, feats_for_scale])])
+    scaled = hcat(df, scaled)
+    feats_for_model = [len_original+1:ncol(scaled)...]
+    env = Env(scaled, 1, w_size, real_feats, feats_for_scale, feats_for_model, date_feats, commission, lat_ms, [], scaler)
+    
     return env
 
 end
@@ -77,26 +95,24 @@ end
 # posted_asks, posted_bids -- amount of orders placed but not filled
 # PnL -- current calculated PnL (based on portfolio reevaluation)
 # Invested -- amount invested into assets, used for portfolio evaluation
-function add_features!(env::Env)
+function add_features!(df::DataFrame, real_feats::Vector{Int})
     # one more real feature: owned volume
-    push!(env.real_feats, ncol(env.data) +1)
-    env.data.Vol .= T(0.0)
+    push!(real_feats, ncol(df) +1)
+    df.Vol .= T(0.0)
 
     # Posted bids and asks
-    push!(env.real_feats, ncol(env.data) + 1)
-    env.data.posted_asks .= T(0.0)
-    push!(env.real_feats, ncol(env.data) + 1)
-    env.data.posted_bids .= T(0.0)
+    push!(real_feats, ncol(df) +1)
+    df.posted_asks .= T(0.0)
+    push!(real_feats, ncol(df) +1)
+    df.posted_bids .= T(0.0)
 
     # PnL to be calculated
-    push!(env.real_feats, ncol(env.data) + 1)
-    env.data.PnL .= T(0.0)
+    push!(real_feats, ncol(df) +1)
+    df.PnL .= T(0.0)
 
     # how much we invested into owned assets
-    push!(env.real_feats, ncol(env.data) + 1)
-    env.data.Invested .= T(0.0)
-    
-    return env
+    push!(real_feats, ncol(df) +1)
+    df.Invested .= T(0.0)    
 end
 
 #=================================================================================#
@@ -107,16 +123,17 @@ Env(df::DataFrame;
     w_size::Int = 400, 
     commission::AbstractFloat = -0.0002,
     lat_ms::Int = 60,
-    exclude_cols::Vector{String} = []
-    ) = init_env!(df, w_size, commission, lat_ms, exclude_cols)
+    exclude_cols::Vector{String} = [],
+    scaler::Union{SCALER_TYPE, Nothing} = nothing
+    ) = init_env!(df, w_size, commission, lat_ms, exclude_cols, scaler)
 
 # via path to CSV
-Env(path::String; 
-    w_size::Int = 400,
-    commission::AbstractFloat = -0.0002,
-    lat_ms::Int = 60,
-    exclude_cols::Vector{String} = []
-    ) = init_env!(CSV.read(path, DataFrame), w_size, commission, lat_ms, exclude_cols)
+# Env(path::String; 
+#     w_size::Int = 400,
+#     commission::AbstractFloat = -0.0002,
+#     lat_ms::Int = 60,
+#     exclude_cols::Vector{String} = []
+#     ) = init_env!(CSV.read(path, DataFrame), w_size, commission, lat_ms, exclude_cols)
 
 # check if we are at the end of dataframe
 done(env::Env) = env.w_size > (nrow(env.data) - env.last_point[] - 1)
@@ -169,17 +186,18 @@ function execute!(env::Env, step::Int=2, realize_gain::Bool = true)
     item = env.data[env.last_point[], :]
     
     # midprice, max and min asks/bids
-    MaxA = max(env.data.o_ask_px_1[env.last_point[] : env.last_point[] + step]...)
-    MinB = min(env.data.o_bid_px_1[env.last_point[] : env.last_point[] + step]...)
+    MinA = min(env.data.o_ask_px_1[env.last_point[] : env.last_point[] + env.w_size]...)
+    MaxB = max(env.data.o_bid_px_1[env.last_point[] : env.last_point[] + env.w_size]...)
     mid_px = env.data.midprice[env.last_point[] + step]
-    @assert MaxA > MinB
+    # @assert MaxA > MinB
 
     #matching the orders
     exRes = match_orders!(orders = env.orders, 
-                        best_bid = MinB, 
-                        best_ask = MaxA,
+                        best_bid = MaxB, 
+                        best_ask = MinA,
                         comm     = env.commission
     )
+
 
     # updating of posted order stats
     item.posted_asks -= exRes.executed_asks
@@ -203,6 +221,7 @@ function execute!(env::Env, step::Int=2, realize_gain::Bool = true)
     # from the transaction already accounted for above)
     realize_gain && (item.Vol      = 0.0)
     realize_gain && (item.Invested = 0.0)
+    # println("Executing env with A: $(item.o_ask_px_1), B: $(item.o_bid_px_1), bestA: $MinA, bestB: $MaxB. Executed with PnL $(exRes.PnL_delta) and q_delta: $(exRes.q_delta). Pnl Delta: $delta, remained Vol: $(item.Vol)")
 
     return env_res(delta, item.PnL, exRes.total_executed, item.Vol) 
 end
@@ -231,42 +250,73 @@ function step(env::Env, step::Int=2)
 end
 
 # getters for current state
-function get_state(env::Env)
+function get_state(env::Env, scale::Bool = false)
+    scale && (return env.data[env.last_point[], env.feats_for_model])
     return env.data[env.last_point[], env.real_feats]
 end
 
-function get_state(env::Env, idx::Int)
+function get_state(env::Env, idx::Int, scale::Bool = false)
+    scale && (return env.data[idx, env.feats_for_model])
     return env.data[idx, env.real_feats]
 end
+
+
 
 #---------------------------------------------------------#
 # simulation of enviroment                                #   
 #---------------------------------------------------------#
 # Function need some Function which accepts Env, state and additional arguments
 # and expects it to fill the env with orders for evaluation.
-# 
+struct sim_result
+    reward::Vector{AbstractFloat}
+    executed_orders::Vector{Int}
+    PnL::Ref{AbstractFloat}
+end
+
 function simulate!(
     env::Env;               
     order_action::Function,     # accepts Env, DataFrameRow, Any and trigget input_order(Env, Order)
     step_::Int,
     kwargs,                     # anything needed for order_action()
-    clear_env_at_step::Bool = false
+    clear_env_at_step::Bool = false,
+    clear_every::Int = 5
 )
     set_up_episode!(env, 1)
-    res_sim = Dict(
-        "reward" => [],
-        "executed_orders" => []
-    )
+    res_sim = sim_result([], [], 0.0)
+    iter = 0
     while !done(env)
+        (iter % clear_every == 0) && (set_up_episode!(env, env.last_point[], true))
         # if required, clear all outstanding orders and statistics
         clear_env_at_step && (set_up_episode!(env, env.last_point[]))
-        state = get_state(env)
-        order_action(env, state, kwargs)
+        order_action(env, kwargs)
         result = execute!(env, env.w_size)
-        push!(res_sim["reward"], result.reward)
-        push!(res_sim["executed_orders"], result.orders_done)
+        push!(res_sim.reward, result.reward)
+        push!(res_sim.executed_orders, result.orders_done)
         step(env, step_)
+        iter += 1
     end
+    res_sim.PnL[] = sum(res_sim.reward)
+
     return res_sim
 end
 
+struct order_exec_stats
+    two_completed::Int
+    one_completed::Int
+    no_action::Int
+    other::Int
+end
+
+function mm_eval(stats::sim_result)
+    two_completed = 0
+    one_completed = 0
+    no_action = 0
+    other = 0
+    for n in stats.executed_orders
+        (n == 2) && (two_completed += 1)
+        (n == 1) && (one_completed += 1)
+        (n == 0) && (no_action     += 1)
+        (n > 2) &&  (other         += 1)
+    end
+    return order_exec_stats(two_completed, one_completed, no_action, other)
+end
