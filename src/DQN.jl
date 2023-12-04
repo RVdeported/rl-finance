@@ -10,48 +10,26 @@ include("Env.jl")
 include("BaseTypes.jl")
 
 T = Float32
-struct DQN
+struct DQN <: RLModel
     target_model::Ref{Chain}
     predict_model::Ref{Chain}
     action_space::Vector{Tuple{T, T}} # buy and sell offset
-    eps_start::AbstractFloat
-    eps_end::AbstractFloat
-    eps_decay::Int
-    rew_decay::AbstractFloat
-    reg_vol::AbstractFloat
-    lr::AbstractFloat
     stats::Dict{String, Vector}
 end
 
 
 function init!(;
     in_feats::Int64,
+    out_feats::Int64,
     layers::Vector{Int64},
-    action_space::Vector{Tuple{T, T}},
-    eps_start::AbstractFloat = 0.9,
-    eps_end::AbstractFloat   = 0.05,
-    eps_decay::Int64         = 10000,
-    rew_decay::AbstractFloat = 0.9,
-    reg_vol::AbstractFloat   = 15.0,
-    lr::AbstractFloat        = 1e-5
+    action_space::Vector{Tuple{T, T}}
 )
-    pushfirst!(layers, in_feats)
-    first_L = Chain([Dense(layers[i], layers[i+1], relu; init=Flux.glorot_normal(gain=1)) 
-                        for i in 1:(length(layers) - 1)])
-    final_L = Dense(pop!(layers), length(action_space); init=Flux.glorot_normal(gain=1))
-    
-    model = Chain(first_L, final_L)
+    model = make_chain(layers, in_feats, out_feats, relu)
     
     dqn = DQN(
         model,
         deepcopy(model),
         action_space,
-        eps_start,
-        eps_end,
-        eps_decay,
-        rew_decay,
-        reg_vol,
-        lr,
         Dict(
             "loss" => [],
             "reward" => [],
@@ -63,8 +41,6 @@ function init!(;
     )
     return dqn
 end
-
-thr(dqn::DQN, steps::Int) = dqn.eps_end + (dqn.eps_start - dqn.eps_end) * exp(- T(steps) / dqn.eps_decay)
 
 function move(dqn::DQN, target_gpu::Bool, predict_gpu::Bool)
     dqn.predict_model[]  = fmap(predict_gpu ? cu : cpu, dqn.predict_model[])
@@ -84,6 +60,8 @@ function compose_orders(dqn::DQN, action_idx::Int, mid_px::T)
     return orders
 end
 
+
+
 function train_dqn(
     dqn::DQN,
     env::Env;
@@ -99,19 +77,22 @@ function train_dqn(
     eval_every::Int = 100,
     eval_env::Env = nothing,
     lr_decay::AbstractFloat = 0.95,
-    gradient_clip::AbstractFloat = 1e-3
+    gradient_clip::AbstractFloat = 1e-3,
+    eps_start::AbstractFloat = 0.05,
+    eps_end::AbstractFloat   = 0.90,
+    eps_decay::Int = 5000,
+    rew_decay::AbstractFloat = 0.7,
+    reg_vol::T = T(0.7),
+    lr::AbstractFloat = 1e-5
 )
-    warm_up = true
-
     replay_memory = Tuple{Int, Int, Int, T, Vector{T}, Vector{T}, T}[]
     add_rm(x) = (length(replay_memory) >= replay_memory_len) ? (popfirst!(replay_memory); push!(replay_memory, x)) : push!(replay_memory, x)
     eval_res = []
-
-    # optim = Adam(dqn.lr)
-    optim = Flux.Optimise.Optimiser(ClipValue(gradient_clip), ADAM(dqn.lr))
-    
     move(dqn, false, true)
+
+    optim = Flux.Optimise.Optimiser(ClipValue(gradient_clip), ADAM(lr))
     opt_state_val = Flux.setup(optim, dqn.predict_model[])
+
     global_step = 1
 
     bar = ProgressBar(1:episodes)
@@ -136,7 +117,7 @@ function train_dqn(
             state = cu(T[state_dr...])
             
             policy = cpu(dqn.predict_model[](state))
-            if rand() > thr(dqn, global_step)
+            if rand() > thr(eps_start, eps_end, eps_decay, global_step)
                 action_idx = argmax(policy)
             else
                 random_count += 1
@@ -168,7 +149,7 @@ function train_dqn(
         size_rm = length(replay_memory)
         size_rew = length(reward_arr)
         for i in 1:size_rew
-            rew_cumm = sum([n * dqn.rew_decay ^ (t-1) for (t,n) in enumerate(reward_arr)])
+            rew_cumm = sum([n * rew_decay ^ (t-1) for (t,n) in enumerate(reward_arr)])
             @set! replay_memory[size_rm - size_rew + i][4] = T(rew_cumm)
             popfirst!(reward_arr)
         end
@@ -184,7 +165,8 @@ function train_dqn(
             optim = opt_state_val,
             warm  = ep_idx < warm_up_episodes,
             alpha = alpha,
-            gamma = gamma
+            gamma = gamma,
+            reg_vol = reg_vol
         )
         optim[2].eta *= lr_decay
         push!(dqn.stats["reward"], avg_reward)
@@ -219,6 +201,7 @@ function optimize(
     warm::Bool = true,
     alpha::T = T(0.7),
     gamma::T = T(0.6),
+    reg_vol::T = T(0.7),
     optim
 )  
     items = Int[rand(1:length(replay_memory)) for _ in 1:batch_len]
@@ -244,9 +227,9 @@ function optimize(
     next_states = nothing
 
     Vol_id = findall( x -> occursin("Vol", x), names(get_state(env, true)))[1]
-    # reward_eval = [n[4] - abs(n[6][Vol_id]) * dqn.reg_vol for n in rm_items]
-    reward_eval = [log(max(abs(n[4]), 1e-7)) * sign(n[4]) - abs(n[6][Vol_id]) * dqn.reg_vol for n in rm_items]
-    # reward_eval = [ 10 - abs(n[6][Vol_id]) * dqn.reg_vol for n in rm_items]
+    # reward_eval = [n[4] - abs(n[6][Vol_id]) * reg_vol for n in rm_items]
+    reward_eval = [log(max(abs(n[4]), 1e-7)) * sign(n[4]) - abs(n[6][Vol_id]) * reg_vol for n in rm_items]
+    # reward_eval = [ 10 - abs(n[6][Vol_id]) * reg_vol for n in rm_items]
     if warm
         labels = reward_eval 
     else

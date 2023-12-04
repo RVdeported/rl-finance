@@ -144,7 +144,7 @@ function set_up_episode!(
     start_point::Int = 1,
     empty_vol::Bool = true
     )
-    @assert start_point < (nrow(env.data) - env.w_size)
+    @assert start_point < (nrow(env.data) - env.w_size) "Incorrect start pos $(start_point) with rows $(nrow(env.data)) and w_size $(env.w_size)"
     env.last_point[] = start_point
     empty_vol && (env.data.Vol[start_point] = 0.0)
     empty_vol && (env.data.PnL[start_point] = 0.0)
@@ -203,7 +203,7 @@ function execute!(env::Env, step::Int=2, realize_gain::Bool = true)
     item.posted_asks -= exRes.executed_asks
     item.posted_bids -= exRes.executed_bids
 
-    @assert (item.posted_asks >= 0) && (item.posted_bids >= 0)
+    @assert (item.posted_asks >= 0) && (item.posted_bids >= 0) "Negative A or B: $(item.posted_asks)/$(item.posted_bids)"
 
     # updating factually Invested sum and volume 
     item.Invested -= exRes.PnL_delta
@@ -221,10 +221,10 @@ function execute!(env::Env, step::Int=2, realize_gain::Bool = true)
     # from the transaction already accounted for above)
     realize_gain && (item.Vol      = 0.0)
     realize_gain && (item.Invested = 0.0)
-    # println("Executing env with A: $(item.o_ask_px_1), B: $(item.o_bid_px_1), bestA: $MinA, bestB: $MaxB. Executed with PnL $(exRes.PnL_delta) and q_delta: $(exRes.q_delta). Pnl Delta: $delta, remained Vol: $(item.Vol)")
 
     return env_res(delta, item.PnL, exRes.total_executed, item.Vol) 
 end
+
 
 
 #---------------------------------------------------------#
@@ -235,7 +235,7 @@ end
 # data copying financial stats data from previous step
 function step(env::Env, step::Int=2)
     @assert !done(env)
-    @assert step < env.w_size
+    @assert step < env.w_size "Step exceeds w_size: $(step) vs $(env.w_size)"
 
     curr_item = env.data[env.last_point[], :]
     new_item  = env.data[env.last_point[] + step, :]
