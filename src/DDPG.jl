@@ -277,7 +277,7 @@ function optimize(
                            Flux.params([ddpg.A_model, ddpg.C_model]))
         dest .= t_beta .* dest  .+ (1-t_beta) .* src
     end
-    return Dict("A_loss" => A_val, "C_loss" => C_val, "labels" => mean(cpu(labels)))
+    return Dict("A_loss" => A_val, "C_loss" => C_val, "labels" => mean(cpu(C_labels)))
 end
 
 function order_action_ddpg(
