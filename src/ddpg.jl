@@ -61,6 +61,7 @@ eval_res = train_ddpg(
     lr        = c["lr"],
     reg_vol   = T(c["reg_vol"]),
     reg_action= T(c["reg_action"]),
+    rew_offset= T(c["rew_offset"]),
     noise_sigma = c["noise_sigma"],
     noise_mean = c["noise_mean"],
     t_beta = c["t_beta"]

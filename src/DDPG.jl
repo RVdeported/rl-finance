@@ -40,7 +40,8 @@ function init_ddpg!(;
             "no_actions" => [],
             "vol_left" => [],
             "noise" => [],
-            "lr" => []
+            "lr" => [],
+            "C_labels" => []
         )
     )
     return ddpg
@@ -82,6 +83,7 @@ function train_ddpg(
     rew_decay::AbstractFloat = 0.7,
     reg_vol::T = T(0.7),
     reg_action::T = T(1e-5),
+    rew_offset::T = T(0.0),
     lr::AbstractFloat = 1e-5,
     t_beta::AbstractFloat = 0.1
 )
@@ -166,6 +168,7 @@ function train_ddpg(
             # gamma = gamma,
             reg_vol = reg_vol,
             reg_action = reg_action,
+            rew_offset = rew_offset,
             t_beta = t_beta
         )
         A_optim[2].eta *= lr_decay
@@ -173,6 +176,7 @@ function train_ddpg(
         push!(ddpg.stats["reward"], avg_reward)
         push!(ddpg.stats["loss"], loss["C_loss"])
         push!(ddpg.stats["A_loss"], loss["A_loss"])
+        push!(ddpg.stats["C_labels"], loss["labels"])
         push!(ddpg.stats["vol_left"], vol_left)
         push!(ddpg.stats["noise"], noise)
         push!(ddpg.stats["lr"], A_optim[2].eta)
@@ -201,6 +205,7 @@ function optimize(
     alpha::T = T(0.7),
     # gamma::T = T(0.6),
     reg_vol::T = T(0.7),
+    rew_offset::T = T(0.0),
     A_optim,
     C_optim,
     t_beta::AbstractFloat = 0.2,
@@ -229,7 +234,7 @@ function optimize(
     next_states_Q_values = vcat(cpu.(ddpg.Ct_model.(next_states_v_actions))...)
 
     Vol_id = findall( x -> occursin("Vol", x), names(get_state(env, true)))[1]
-    reward_eval = [n[4] - reg_vol * abs(n[6][Vol_id]) - reg_action * StatsBase.norm(states_actions)
+    reward_eval = [n[4] - reg_vol * abs(n[6][Vol_id]) + rew_offset - reg_action * StatsBase.norm(states_actions)
                     for n in rm_items]
     if warm
         C_labels = reward_eval 
@@ -272,7 +277,7 @@ function optimize(
                            Flux.params([ddpg.A_model, ddpg.C_model]))
         dest .= t_beta .* dest  .+ (1-t_beta) .* src
     end
-    return Dict("A_loss" => A_val, "C_loss" => C_val)
+    return Dict("A_loss" => A_val, "C_loss" => C_val, "labels" => mean(cpu(labels)))
 end
 
 function order_action_ddpg(
