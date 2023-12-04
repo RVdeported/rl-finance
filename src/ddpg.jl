@@ -67,6 +67,6 @@ eval_res = train_ddpg(
     t_beta = c["t_beta"]
 )
 
-res = Dict("eval" => eval_res, "model_stats" => ddpg.stats)
+res = Dict("eval" => eval_res, "model" => ddpg)
 
 @save OUT_PATH res
