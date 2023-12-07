@@ -6,45 +6,45 @@ test_start_idx: 910000
 test_end_idx: end
 
 #--------------model settings-----------------
-actions:     # combinations of these actions (buy, sell) will be created + (0.0, 0.0) action
-    - 0.4
+actions:
+    - 0.5
     - 2.0
 layers: 
     - 256
+    - 64
     - 16
-    # - 16
 
 #--------------training settings-----------------
 #---episodes and replay buffer
-episodes: 12000
-max_episode_len: 10
+episodes: 5000
+max_episode_len: 5
 replay_memory_len: 512
 replay_batch: 64
 eval_every: 100
 #---EvE variables
-eps_start:     0.90       
+eps_start:     0.90
 eps_end:       0.05
-eps_decay:     15000
+eps_decay:     20000
 #---reward variables
-reward_decay:  0.5
-reg_vol:       40.0
-warm_up_episodes: 100  # first episodes to use Only reward
+reward_decay:  0.3
+reg_vol:       50.0
+warm_up_episodes: 100
 #--- Q calculation: Qp + alpha * (R + gamma * Qt' - Qp)
-alpha:         0.9     
+alpha:         0.9
 gamma:         0.5
 #---learning rate
 lr:            1e-4
-lr_decay:      0.999
+lr_decay:      0.9999
 gradient_clip: 1e-2
 #---target update settings
-merge_soft: true        # if true, Gt' = merge_alpha * Gt + (1-merge_alpha) * Gp else merges every N episodes 
-merge_dqns_every: 10    # non relevant if merge_soft==true
-merge_alpha: 0.2        # non relevant if merge_soft==false
+merge_dqns_every: 10
+merge_soft: true
+merge_alpha: 0.3
 
 #--------------env settings-----------------
-trading_step: 200       
-window_step: 20         
-commission: -0.0002
+commission: -0.0002    # how far we predict
+trading_step: 200
+window_step: 20
 exclude_cols:
     - "target"
     - "target_min"

@@ -1,6 +1,6 @@
 using Pkg
 Pkg.activate("../alp")
-EPS = 1e-6
+EPS = 1e-4
 
 abstract type RLModel end
 

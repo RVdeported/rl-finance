@@ -74,6 +74,8 @@ function train_dqn(
     alpha::T = 0.6,
     gamma::T = 0.7,
     merge_every::Int = 5,
+    merge_soft::Bool = true,
+    merge_alpha::T = T(0.5),
     eval_every::Int = 100,
     eval_env::Env = nothing,
     lr_decay::AbstractFloat = 0.95,
@@ -176,7 +178,14 @@ function train_dqn(
         push!(dqn.stats["randoms"], random_count)
         push!(dqn.stats["lr"], optim[2].eta)
         
-        (ep_idx % merge_every == 0) && (dqn.target_model[] = deepcopy(dqn.predict_model[]))
+        if !merge_soft
+            (ep_idx % merge_every == 0) && (dqn.target_model[] = deepcopy(dqn.predict_model[]))
+        else
+            for (dest, src) in zip(Flux.params(dqn.target_model), 
+                                    Flux.params(dqn.predict_model))
+                dest .= merge_alpha .* dest  .+ (1-merge_alpha) .* src
+            end
+        end
 
         if (ep_idx % eval_every == 0) && !(isnothing(eval_env))
             move(dqn, false, true)
@@ -227,8 +236,8 @@ function optimize(
     next_states = nothing
 
     Vol_id = findall( x -> occursin("Vol", x), names(get_state(env, true)))[1]
-    # reward_eval = [n[4] - abs(n[6][Vol_id]) * reg_vol for n in rm_items]
-    reward_eval = [log(max(abs(n[4]), 1e-7)) * sign(n[4]) - abs(n[6][Vol_id]) * reg_vol for n in rm_items]
+    reward_eval = [n[4] - abs(n[6][Vol_id]) * reg_vol for n in rm_items]
+    # reward_eval = [log(max(abs(n[4]), 1e-7)) * sign(n[4]) - abs(n[6][Vol_id]) * reg_vol for n in rm_items]
     # reward_eval = [ 10 - abs(n[6][Vol_id]) * reg_vol for n in rm_items]
     if warm
         labels = reward_eval 

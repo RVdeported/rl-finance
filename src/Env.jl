@@ -189,7 +189,6 @@ function execute!(env::Env, step::Int=2, realize_gain::Bool = true)
     MinA = min(env.data.o_ask_px_1[env.last_point[] : env.last_point[] + env.w_size]...)
     MaxB = max(env.data.o_bid_px_1[env.last_point[] : env.last_point[] + env.w_size]...)
     mid_px = env.data.midprice[env.last_point[] + step]
-    # @assert MaxA > MinB
 
     #matching the orders
     exRes = match_orders!(orders = env.orders, 

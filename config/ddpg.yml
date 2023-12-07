@@ -17,6 +17,7 @@ reward_decay:  0.7
 lr:            1e-6
 reg_vol:       2.0
 reg_action:    1e-6
+rew_offset:    100.0
 warm_up_episodes: 100
 alpha:         0.9
 gamma:         0.5
@@ -30,7 +31,7 @@ C_layers:
     - 512
     - 32
 
-episodes: 12000
+episodes: 10
 eval_every: 100
 max_episode_len: 10
 replay_memory_len: 1024

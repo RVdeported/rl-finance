@@ -14,6 +14,7 @@ mutable struct DDPG <: RLModel
     A_model::Chain
     Ct_model::Chain
     C_model::Chain
+    An_model::Chain
     action_space::Int # number of outputs of type T
     stats::Dict{String, Vector}
 end
@@ -32,6 +33,7 @@ function init_ddpg!(;
         deepcopy(A),
         C,
         deepcopy(C),
+        deepcopy(A),
         action_space,
         Dict(
             "loss" => [],
@@ -41,7 +43,8 @@ function init_ddpg!(;
             "vol_left" => [],
             "noise" => [],
             "lr" => [],
-            "C_labels" => []
+            "C_labels" => [],
+            "a_norm" => []
         )
     )
     return ddpg
@@ -51,11 +54,14 @@ function move(ddpg::DDPG,
             A_gpu::Bool  = false, 
             At_gpu::Bool = false, 
             C_gpu::Bool  = false, 
-            Ct_gpu::Bool = false)
+            Ct_gpu::Bool = false,
+            An_gpu::Bool = false,
+            )
     ddpg.At_model = fmap(At_gpu ? cu : cpu, ddpg.At_model)
     ddpg.A_model  = fmap(A_gpu ? cu : cpu,  ddpg.A_model)
     ddpg.Ct_model = fmap(Ct_gpu ? cu : cpu, ddpg.Ct_model)
     ddpg.C_model  = fmap(C_gpu ? cu : cpu,  ddpg.C_model)
+    ddpg.An_model  = fmap(An_gpu ? cu : cpu,  ddpg.An_model)
 end
 
 
@@ -73,7 +79,6 @@ function train_ddpg(
     gamma::T = 0.7,
     eval_every::Int = 100,
     eval_env::Env = nothing,
-    lr_decay::AbstractFloat = 0.95,
     gradient_clip::AbstractFloat = 1e-3,
     eps_start::AbstractFloat = 0.05,
     eps_end::AbstractFloat   = 0.90,
@@ -84,15 +89,18 @@ function train_ddpg(
     reg_vol::T = T(0.7),
     reg_action::T = T(1e-5),
     rew_offset::T = T(0.0),
-    lr::AbstractFloat = 1e-5,
+    lr_A::AbstractFloat = 1e-5,
+    lr_C::AbstractFloat = 1e-5,
+    lr_decay_A::AbstractFloat = 0.95,
+    lr_decay_C::AbstractFloat = 0.95,
     t_beta::AbstractFloat = 0.1
 )
     replay_memory = Tuple{Int, Int, Vector{T}, T, Vector{T}, Vector{T}, T}[]
     add_rm(x) = (length(replay_memory) >= replay_memory_len) ? (popfirst!(replay_memory); push!(replay_memory, x)) : push!(replay_memory, x)
     eval_res = []
     move(ddpg, true, false, true, false)
-    A_optim = Flux.Optimise.Optimiser(ClipValue(gradient_clip), ADAM(lr))
-    C_optim = Flux.Optimise.Optimiser(ClipValue(gradient_clip), ADAM(lr))
+    A_optim = Flux.Optimise.Optimiser(ClipValue(gradient_clip), ADAM(lr_A))
+    C_optim = Flux.Optimise.Optimiser(ClipValue(gradient_clip), ADAM(lr_C))
     A_opt_state_val = Flux.setup(A_optim, ddpg.A_model)
     C_opt_state_val = Flux.setup(C_optim, ddpg.C_model)
     global_step = 1
@@ -103,12 +111,21 @@ function train_ddpg(
         set_up_episode!(env, env.last_point[], true)
         @assert get_state(env).Vol == 0.0
         @assert get_state(env).PnL == 0.0
-        move(ddpg, true, false, false, false)
+        move(ddpg, false, false, false, false)
         
         avg_reward = 0.0
         noise = 0.0
         vol_left = 0.0
         reward_arr = []
+        noise = thr(eps_start, eps_end, eps_decay, global_step)
+        for (dest, src) in zip(Flux.params([ddpg.An_model]), 
+                                Flux.params([ddpg.A_model]))
+            dest .= deepcopy(src) .+ rand(norm, size(src)) .* noise
+        end
+        # println("An params $ep_idx $(Flux.params(ddpg.An_model)[1][1:1, 1:5])")
+        # println("C params $ep_idx $(Flux.params(ddpg.C_model)[1][1:1, 1:5])")
+        move(ddpg, false, false, false, false, true)
+        a_norm = T(0.0)
         for pred_idx in 1:max_ep_len
             done(env) && break
             
@@ -118,16 +135,16 @@ function train_ddpg(
             mid_px = state_orig.midprice
             state = cu(T[state_dr...])
             
-            actions = cpu(ddpg.A_model(state))
-            t = thr(eps_start, eps_end, eps_decay, global_step)
-            noise = t
-            actions .+= rand(norm, ddpg.action_space) * t
+            actions = cpu(ddpg.An_model(state))
+            a_norm += StatsBase.norm(actions)
+            # noise = thr(eps_start, eps_end, eps_decay, global_step)
+            # actions .+= rand(norm, ddpg.action_space) * noise
 
             global_step += 1
 
             orders = compose_orders(
-                sell_delta = actions[1], 
-                buy_delta = actions[2], 
+                sell_delta = abs(actions[1]), 
+                buy_delta  = abs(actions[2]), 
                 mid_px = mid_px)
 
             for n in orders
@@ -154,8 +171,8 @@ function train_ddpg(
         end
 
         set_description(bar, 
-            string(@sprintf("Episode %i... noise: %.2f, avg reward: %.2f, avg vol: %.2f", 
-            ep_idx, noise, avg_reward, vol_left)))
+            string(@sprintf("Episode %i... noise: %.2f, avg reward: %.2f, avg vol: %.2f a_norm: %.2f", 
+            ep_idx, noise, avg_reward, vol_left, a_norm / max_ep_len)))
 
         move(ddpg)
         loss = optimize(env, ddpg; 
@@ -171,7 +188,8 @@ function train_ddpg(
             rew_offset = rew_offset,
             t_beta = t_beta
         )
-        A_optim[2].eta *= lr_decay
+        A_optim[2].eta *= lr_decay_A
+        C_optim[2].eta *= lr_decay_C
 
         push!(ddpg.stats["reward"], avg_reward)
         push!(ddpg.stats["loss"], loss["C_loss"])
@@ -180,6 +198,7 @@ function train_ddpg(
         push!(ddpg.stats["vol_left"], vol_left)
         push!(ddpg.stats["noise"], noise)
         push!(ddpg.stats["lr"], A_optim[2].eta)
+        push!(ddpg.stats["a_norm"], a_norm / max_ep_len)
         
         if (ep_idx % eval_every == 0) && !(isnothing(eval_env))
             move(ddpg, true, false)
@@ -198,7 +217,7 @@ end
 
 function optimize(
     env::Env,
-    ddqn::DDPG;
+    ddpg::DDPG;
     replay_memory::Vector{Tuple{Int, Int, Vector{T}, T, Vector{T}, Vector{T}, T}},
     batch_len::Int = 128,
     warm::Bool = true,
@@ -234,7 +253,7 @@ function optimize(
     next_states_Q_values = vcat(cpu.(ddpg.Ct_model.(next_states_v_actions))...)
 
     Vol_id = findall( x -> occursin("Vol", x), names(get_state(env, true)))[1]
-    reward_eval = [n[4] - reg_vol * abs(n[6][Vol_id]) + rew_offset - reg_action * StatsBase.norm(states_actions)
+    reward_eval = [n[4] - reg_vol * abs(n[6][Vol_id]) + rew_offset # - reg_action * StatsBase.norm(states_actions)
                     for n in rm_items]
     if warm
         C_labels = reward_eval 
@@ -247,29 +266,32 @@ function optimize(
         
     C_labels = cu(C_labels)    
     states_v_actions = cu(mapreduce(permutedims, vcat, states_v_actions))
+    states_actions   = cu(mapreduce(permutedims, vcat, states_actions))
     states           = cu(mapreduce(permutedims, vcat, states))
+    reg_action_cu = cu(T(reg_action))
 
-    C_val, grads = Flux.withgradient(ddpg.C_model) do m
+    C_val, C_grads = Flux.withgradient(ddpg.C_model) do m
         loss = cu(0.0)
         for i in 1:size(states_v_actions)[1]
-            q = m(states_v_actions[i, :])
+            q = m(states_v_actions[i, :]) - cu([sum(states_actions[i, :] .^ 2) * reg_action_cu])
             loss += Flux.mse(q, C_labels[i:i])
         end
         loss / size(states_v_actions)[1]
     end
 
-    Flux.update!(C_optim, ddpg.C_model, grads[1])
+    Flux.update!(C_optim, ddpg.C_model, C_grads[1])
     
-    A_val, grads = Flux.withgradient(ddpg.A_model) do m
+    
+    A_val, A_grads = Flux.withgradient(ddpg.A_model) do m
         loss = cu([T(0.0)])
         for i in 1:size(states)[1]
             q = m(states[i, :])
-            q = ddqn.C_model(vcat(states[i, :], q))
+            q = ddpg.C_model(vcat(states[i, :], q)) - cu([sum(q .^ 2) * reg_action_cu])
             loss -= q
         end
         sum((loss / size(states)[1]))
     end
-    Flux.update!(A_optim, ddpg.A_model, grads[1])
+    Flux.update!(A_optim, ddpg.A_model, A_grads[1])
 
     move(ddpg, false, false, false, false)
 
@@ -289,8 +311,8 @@ function order_action_ddpg(
     mid_px = state.midprice
     scaled_state = cu([scaled_state...])
     action_idx = cpu(ddpg.A_model(scaled_state))
-    orders = compose_orders(sell_delta = action_idx[1], 
-                            buy_delta = action_idx[2], 
+    orders = compose_orders(sell_delta = abs(action_idx[1]), 
+                            buy_delta = abs(action_idx[2]), 
                             mid_px = mid_px)
     for n in orders
         # display(n)

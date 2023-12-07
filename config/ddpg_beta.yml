@@ -1,45 +1,57 @@
-# path_df: ../data/roman_c1.csv
+#--------------general settings-----------------
 path_df: ../data/roman_ETHUSD_c1_d16-28.csv
-trading_step: 200
-window_step: 50
 train_start_idx: 1
 train_end_idx: 905000
 test_start_idx: 910000
 test_end_idx: end
-commission: -0.0002
 
-eps_start:     0.80
-eps_end:       0.005
-eps_decay:     30000
-noise_sigma:   50.0
-noise_mean:    30.0
-reward_decay:  0.7
-lr:            1e-6
-reg_vol:       2.0
-reg_action:    1e-6
-warm_up_episodes: 100
-alpha:         0.9
-gamma:         0.5
-t_beta:        0.4
-lr_decay:      0.9997
-gradient_clip: 1e-7
+#--------------model settings-----------------
 A_layers: 
-    - 128
+    - 256
     - 16
 C_layers: 
-    - 128
-    - 15
+    - 512
+    - 16
 
-episodes: 100
+#--------------training settings-----------------
+#---episodes and replay buffer
+episodes: 1000
 eval_every: 100
 max_episode_len: 10
-replay_memory_len: 1024
+replay_memory_len: 512
 replay_batch: 64
+#---EvE variables
+eps_start:     0.90
+eps_end:       0.05
+eps_decay:     7000
+noise_sigma:   0.3
+noise_mean:    0.0
+#---reward variables
+reg_vol:       20.0
+reg_action:    1e-2
+rew_offset:    5.0
+warm_up_episodes: 50
+reward_decay:  0.2
+#--- Q calculation: Qp + alpha * (R + gamma * Qt' - Qp)
+alpha:         0.9
+gamma:         0.5
+#---learning rate
+lr_A:          1e-2
+lr_C:          1e-5
+lr_decay_A:    0.995
+lr_decay_C:    0.993
+gradient_clip: 1e-3
+#---target update settings
+t_beta:        0.2
 
+#--------------env settings-----------------
+trading_step: 200
+window_step: 20
+commission: -0.0002
 exclude_cols:
-    - "target"
-    - "target_min"
-    - "target_max" 
+    # - "target"
+    # - "target_min"
+    # - "target_max" 
     - "midprice_vwap_v220000.0"
     - "vwap_midprice_diff_v220000.0"
     - "midprice_vwap_v130000.0"
@@ -47,6 +59,7 @@ exclude_cols:
     - "log_vwap_midprice_ratio_v220000.0"
     - "nlrr_ws100"
     - "nlrr_ws500" 
+    - "nlrr_ws2500" 
     - "mean_trend_ws100_midprice"
     - "std_trend_ws100_midprice"
     - "vol_ws100_midprice"

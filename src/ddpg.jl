@@ -8,6 +8,9 @@ include("DDPG.jl")
 
 @assert length(ARGS) > 0
 
+# warm_start = false
+# (length(ARGS) > 1) && (warm_start = Bool(ARGS[2]))
+
 FILE_PREFIX = ARGS[1]
 CONFIG = "../config/$FILE_PREFIX.yml"
 OUT_PATH = "../experiments/$FILE_PREFIX.jld2"
@@ -31,12 +34,18 @@ test_env = Env(
     scaler = train_env.scaler
 )
 
+
+# if !warm_start
 ddpg = init_ddpg!(
     in_feats = length(train_env.feats_for_model),
     A_layers = c["A_layers"],
     C_layers = c["C_layers"],
     action_space = 2
 )
+# else
+#     @load OUT_PATH
+#     ddpg = res["model"]
+# end
 
 eval_res = train_ddpg(
     ddpg,
@@ -52,13 +61,15 @@ eval_res = train_ddpg(
     gamma = T(c["gamma"]),
     eval_every = c["eval_every"],
     eval_env = test_env,
-    lr_decay = c["lr_decay"],
     gradient_clip = c["gradient_clip"],
     eps_start = c["eps_start"],
     eps_end   = c["eps_end"],
     eps_decay = c["eps_decay"],
     rew_decay = c["reward_decay"],
-    lr        = c["lr"],
+    lr_A      = c["lr_A"],
+    lr_C      = c["lr_C"],
+    lr_decay_A= c["lr_decay_A"],
+    lr_decay_C= c["lr_decay_C"],
     reg_vol   = T(c["reg_vol"]),
     reg_action= T(c["reg_action"]),
     rew_offset= T(c["rew_offset"]),
@@ -67,6 +78,6 @@ eval_res = train_ddpg(
     t_beta = c["t_beta"]
 )
 
-res = Dict("eval" => eval_res, "model" => ddpg)
+res = Dict("eval" => eval_res, "model" => ddpg, "config" => c)
 
 @save OUT_PATH res
