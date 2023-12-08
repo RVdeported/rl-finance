@@ -3,7 +3,7 @@ Pkg.activate("../alp")
 using YAML, Plots, JLD2
 include("Env.jl")
 include("BaseTypes.jl")
-include("DDPG.jl")
+include("TD3.jl")
 
 @assert length(ARGS) > 0
 
@@ -16,6 +16,9 @@ OUT_PATH = "../experiments/$FILE_PREFIX.jld2"
 c = YAML.load_file(CONFIG)
 
 PATH = c["path_df"]
+
+Base.Filesystem.mkpath("../experiments/$FILE_PREFIX")
+
 # PATH_ = "../data/roman_raw.csv"
 df = CSV.read(PATH, DataFrame)
 
@@ -35,7 +38,7 @@ test_env = Env(
 
 
 # if !warm_start
-ddpg = init_ddpg!(
+td3 = init_td3!(
     in_feats = length(train_env.feats_for_model),
     A_layers = c["A_layers"],
     C_layers = c["C_layers"],
@@ -46,8 +49,8 @@ ddpg = init_ddpg!(
 #     ddpg = res["model"]
 # end
 
-eval_res = train_ddpg(
-    ddpg,
+eval_res = train_td3(
+    td3,
     train_env;
     episodes=c["episodes"],
     # episodes=5000,
@@ -74,9 +77,11 @@ eval_res = train_ddpg(
     rew_offset= T(c["rew_offset"]),
     noise_sigma = c["noise_sigma"],
     noise_mean = c["noise_mean"],
-    t_beta = c["t_beta"]
+    t_beta = c["t_beta"],
+    save_every = c["save_every"],
+    save_path_pref = "../experiments/$FILE_PREFIX/td3"
 )
 
-res = Dict("eval" => eval_res, "model" => ddpg, "config" => c)
+res = Dict("eval" => eval_res, "model" => td3, "config" => c)
 
 @save OUT_PATH res

@@ -99,6 +99,8 @@ function add_features!(df::DataFrame, real_feats::Vector{Int})
     # one more real feature: owned volume
     push!(real_feats, ncol(df) +1)
     df.Vol .= T(0.0)
+    push!(real_feats, ncol(df) +1)
+    df.absVol .= T(0.0)
 
     # Posted bids and asks
     push!(real_feats, ncol(df) +1)
@@ -147,6 +149,7 @@ function set_up_episode!(
     @assert start_point < (nrow(env.data) - env.w_size) "Incorrect start pos $(start_point) with rows $(nrow(env.data)) and w_size $(env.w_size)"
     env.last_point[] = start_point
     empty_vol && (env.data.Vol[start_point] = 0.0)
+    empty_vol && (env.data.absVol[start_point] = 0.0)
     empty_vol && (env.data.PnL[start_point] = 0.0)
     empty_vol && (env.data.Invested[start_point] = 0.0)
     empty!(env.orders)
@@ -221,6 +224,8 @@ function execute!(env::Env, step::Int=2, realize_gain::Bool = true)
     realize_gain && (item.Vol      = 0.0)
     realize_gain && (item.Invested = 0.0)
 
+    item.absVol = abs(item.Vol)
+
     return env_res(delta, item.PnL, exRes.total_executed, item.Vol) 
 end
 
@@ -242,6 +247,7 @@ function step(env::Env, step::Int=2)
     new_item.posted_bids = curr_item.posted_bids
     new_item.PnL = curr_item.PnL
     new_item.Vol = curr_item.Vol
+    new_item.absVol = curr_item.absVol
     new_item.Invested = curr_item.Invested
 
     env.last_point[] += step

@@ -1,0 +1,10 @@
+experiments/*
+data/*
+.vscode
+.ipynb*
+src/test*
+plan
+test*
+*.png
+__*
+base/
