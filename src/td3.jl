@@ -1,5 +1,6 @@
 using Pkg
 Pkg.activate("../alp")
+Pkg.instantiate()
 using YAML, Plots, JLD2
 include("Env.jl")
 include("BaseTypes.jl")
@@ -12,12 +13,13 @@ include("TD3.jl")
 
 FILE_PREFIX = ARGS[1]
 CONFIG = "../config/$FILE_PREFIX.yml"
-OUT_PATH = "../experiments/$FILE_PREFIX.jld2"
+PATH_PREFIX = "/media/thornail/SteamLinux/RL-finance-experiments"
+OUT_PATH = "$PATH_PREFIX/$FILE_PREFIX.jld2"
 c = YAML.load_file(CONFIG)
 
 PATH = c["path_df"]
 
-Base.Filesystem.mkpath("../experiments/$FILE_PREFIX")
+Base.Filesystem.mkpath("$PATH_PREFIX/$FILE_PREFIX")
 
 # PATH_ = "../data/roman_raw.csv"
 df = CSV.read(PATH, DataFrame)
@@ -79,7 +81,8 @@ eval_res = train_td3(
     noise_mean = c["noise_mean"],
     t_beta = c["t_beta"],
     save_every = c["save_every"],
-    save_path_pref = "../experiments/$FILE_PREFIX/td3"
+    save_path_pref = "$PATH_PREFIX/$FILE_PREFIX/td3",
+    reg_weights = T(c["reg_weights"])
 )
 
 res = Dict("eval" => eval_res, "model" => td3, "config" => c)

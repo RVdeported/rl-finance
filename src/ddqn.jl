@@ -1,5 +1,6 @@
 using Pkg
 Pkg.activate("../alp")
+Pkg.instantiate()
 using YAML, Plots, JLD2
 include("Env.jl")
 include("BaseTypes.jl")
@@ -10,12 +11,14 @@ include("DDPG.jl")
 
 FILE_PREFIX = ARGS[1]
 CONFIG = "../config/$FILE_PREFIX.yml"
-OUT_PATH = "../experiments/$FILE_PREFIX.jld2"
+PATH_PREFIX = "/media/thornail/SteamLinux/RL-finance-experiments"
+OUT_PATH = "$PATH_PREFIX/$FILE_PREFIX.jld2"
 c = YAML.load_file(CONFIG)
 
-PATH = c["path_df"]
 # PATH_ = "../data/roman_raw.csv"
-df = CSV.read(PATH, DataFrame)
+df = CSV.read(c["path_df"], DataFrame)
+
+Base.Filesystem.mkpath("$PATH_PREFIX/$FILE_PREFIX")
 
 train_env = Env(
     df[c["train_start_idx"] : c["train_end_idx"], :]; 
@@ -24,7 +27,7 @@ train_env = Env(
     exclude_cols = c["exclude_cols"],
 )
 test_env = Env(
-    df[c["test_start_idx"] : end, :]; 
+    df[c["test_start_idx"] : c["test_end_idx"], :]; 
     w_size       = c["trading_step"], 
     commission   = c["commission"], 
     exclude_cols = c["exclude_cols"],
@@ -66,7 +69,9 @@ eval_res = train_dqn(
     eps_decay = c["eps_decay"],
     rew_decay = c["reward_decay"],
     lr        = c["lr"],
-    reg_vol   = T(c["reg_vol"])
+    reg_vol   = T(c["reg_vol"]),
+    save_every = c["save_every"],
+    save_path_pref = "$PATH_PREFIX/$FILE_PREFIX/dqn",
 )
 
 res = Dict("eval" => eval_res, "model" => dqn, "config" => c)

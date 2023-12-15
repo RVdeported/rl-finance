@@ -85,9 +85,12 @@ function train_dqn(
     eps_decay::Int = 5000,
     rew_decay::AbstractFloat = 0.7,
     reg_vol::T = T(0.7),
-    lr::AbstractFloat = 1e-5
+    lr::AbstractFloat = 1e-5,
+    save_every = -1,
+    save_path_pref = "./dqn",
+    one_pass::Bool = false,
+    replay_memory::Vector{Tuple{Int, Int, Int, T, Vector{T}, Vector{T}, T}} = []
 )
-    replay_memory = Tuple{Int, Int, Int, T, Vector{T}, Vector{T}, T}[]
     add_rm(x) = (length(replay_memory) >= replay_memory_len) ? (popfirst!(replay_memory); push!(replay_memory, x)) : push!(replay_memory, x)
     eval_res = []
     move(dqn, false, true)
@@ -99,7 +102,7 @@ function train_dqn(
 
     bar = ProgressBar(1:episodes)
     for ep_idx in bar
-        set_up_episode!(env, env.last_point[] + 1, true)
+        set_up_episode!(env, env.last_point[], true)
         @assert get_state(env).Vol == 0.0
         @assert get_state(env).PnL == 0.0
         move(dqn, false, true)
@@ -157,8 +160,8 @@ function train_dqn(
         end
 
         set_description(bar, 
-            string(@sprintf("Episode %i... randoms: %i, no_action: %i, avg reward: %.2f, avg vol: %.2f", 
-            ep_idx, random_count, zero_count, avg_reward, vol_left)))
+            string(@sprintf("Episode %i... randoms: %i, no_action: %i, avg reward: %.2f, avg vol: %.2f, data point: %d", 
+            ep_idx, random_count, zero_count, avg_reward, vol_left,  env.last_point[])))
 
         move(dqn, false, false)
         loss = optimize(env, dqn; 
@@ -195,10 +198,16 @@ function train_dqn(
         end
 
         if done(env)
-            env.last_point[] = 1
+            one_pass && break
+            env.last_point[] = env.start_idx
+        end
+
+        if (save_every > 0 && ep_idx % save_every == 0)
+            res = Dict("model" => dqn, "eval" => eval_res)
+            @save "$(save_path_pref)_$ep_idx.jld2" res
         end
     end
-    return eval_res
+    return eval_res, replay_memory
 end
 
 
@@ -304,3 +313,16 @@ function order_action(
     
 end
 
+function random_action(
+    env::Env,
+    dqn::DQN
+)
+    state = get_state(env)
+    mid_px = state.midprice
+    action_idx = Int64(round(rand() * (length(dqn.action_space) - 1)) + 1)
+    orders = compose_orders(dqn, action_idx, mid_px)
+    for n in orders
+        # display(n)
+        input_order(env, n)
+    end
+end

@@ -1,10 +1,14 @@
 #--------------general settings-----------------
 path_df: ../data/ETHUSD_VTE_ba_16:28-11.csv
 train_start_idx: 1
-train_end_idx: 905000
-test_start_idx: 910000
-test_end_idx: end
-save_every: 1000
+train_end_idx:   10000000000
+save_every:      10
+n_experiments:   100
+init_train_len:  15000
+train_len:       1000
+test_num:        100
+test_len:        1000
+test_step:       10
 
 #--------------model settings-----------------
 actions:
@@ -12,19 +16,18 @@ actions:
     - 1.0
 layers: 
     - 128
-    - 16
+    - 8
 
 #--------------training settings-----------------
 #---episodes and replay buffer
-episodes: 120000
-max_episode_len: 3
-replay_memory_len: 512
+max_episode_len: 2
+replay_memory_len: 128
 replay_batch: 64
 eval_every: 100
 #---EvE variables
 eps_start:     0.90
 eps_end:       0.05
-eps_decay:     200000
+eps_decay:     500000
 #---reward variables
 reward_decay:  0.3
 reg_vol:       50.0
@@ -33,9 +36,9 @@ warm_up_episodes: 100
 alpha:         0.9
 gamma:         0.5
 #---learning rate
-lr:            1e-6
-lr_decay:      0.9999
-gradient_clip: 1e-2
+lr:            1e-4
+lr_decay:      0.95
+gradient_clip: 1e-1
 #---target update settings
 merge_dqns_every: 10  # not important if merge_soft == True
 merge_soft: true

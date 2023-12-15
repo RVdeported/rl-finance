@@ -1,30 +1,30 @@
 #--------------general settings-----------------
-path_df: ../data/roman_ETHUSD_c1_d16-28.csv
+path_df: ../data/ETHUSD_VTE_ba_16:28-11.csv
 train_start_idx: 1
 train_end_idx: 905000
 test_start_idx: 910000
 test_end_idx: end
+save_every: 1000
 
 #--------------model settings-----------------
 actions:
-    - 0.5
-    - 2.0
+    - 0.1
+    - 1.0
 layers: 
-    - 256
     - 64
-    - 16
+    - 8
 
 #--------------training settings-----------------
 #---episodes and replay buffer
-episodes: 5000
-max_episode_len: 5
+episodes: 120000
+max_episode_len: 3
 replay_memory_len: 512
 replay_batch: 64
 eval_every: 100
 #---EvE variables
 eps_start:     0.90
 eps_end:       0.05
-eps_decay:     20000
+eps_decay:     500000
 #---reward variables
 reward_decay:  0.3
 reg_vol:       50.0
@@ -37,14 +37,14 @@ lr:            1e-4
 lr_decay:      0.9999
 gradient_clip: 1e-2
 #---target update settings
-merge_dqns_every: 10
+merge_dqns_every: 10  # not important if merge_soft == True
 merge_soft: true
 merge_alpha: 0.3
 
 #--------------env settings-----------------
-commission: -0.0002    # how far we predict
-trading_step: 200
-window_step: 20
+commission: -0.0002    
+trading_step: 200      # how far we predict
+window_step: 10
 exclude_cols:
     - "target"
     - "target_min"

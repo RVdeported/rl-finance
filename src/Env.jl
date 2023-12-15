@@ -13,7 +13,7 @@ SCALER_TYPE = UnitRangeTransform
 #================================================================#
 # structure for holding essencial env data.
 # Only float columns considered to be features
-struct Env
+mutable struct Env
     data::DataFrame          # dataset holder
     last_point::Ref{Int}     # last index of interest
     w_size::Int              # window of predictions
@@ -25,6 +25,8 @@ struct Env
     lat_ms::Int16            # NOT IMPLEMENTED latency simulation
     orders::Vector{Order}    # holder of currently placed orders
     scaler::Union{SCALER_TYPE, Nothing}
+    start_idx::Int
+    end_idx::Int
 end
 
 # type of float in use
@@ -41,12 +43,14 @@ global to_dt(x) = DateTime(x[1:23], FORMAT)
 # noted below in add_features!
 # requires at least o_ask_px_1, o_bid_px_1, o_ts_recv and midprice columns
 function init_env!(
-    df::DataFrame,  
-    w_size::Int = 400,
-    commission::AbstractFloat = -0.0002,
-    lat_ms::Int = 60,
-    exclude_cols::Vector{String} = [],
-    scaler::Union{SCALER_TYPE, Nothing} = nothing
+        df::DataFrame,  
+        w_size::Int = 400,
+        commission::AbstractFloat = -0.0002,
+        lat_ms::Int = 60,
+        exclude_cols::Vector{String} = [],
+        scaler::Union{SCALER_TYPE, Nothing} = nothing,
+        start_idx::Int = -1,
+        end_idx::Int = -1
     )
     
     names_ = names(df)
@@ -70,7 +74,8 @@ function init_env!(
             ("o_bid_px_1" in names_) && 
             ("o_ts_recv"  in names_) &&
             ("midprice"   in names_)
-
+    @assert start_idx <= end_idx
+     
     # adding features for trade statistics
     feats_for_scale = deepcopy(real_feats)
     len_original = ncol(df)
@@ -81,7 +86,12 @@ function init_env!(
     scaled = DataFrame(scaled, ["scaled_"*n for n in names(df[1:1, feats_for_scale])])
     scaled = hcat(df, scaled)
     feats_for_model = [len_original+1:ncol(scaled)...]
-    env = Env(scaled, 1, w_size, real_feats, feats_for_scale, feats_for_model, date_feats, commission, lat_ms, [], scaler)
+
+    start_idx_ = (start_idx > 0) ? start_idx : 1
+    end_idx_   = (end_idx > 0) ? end_idx : nrow(df)
+    env = Env(scaled, start_idx_, w_size, real_feats, feats_for_scale, feats_for_model, 
+            date_feats, commission, lat_ms, [], scaler,
+            start_idx_, end_idx_)
     
     return env
 
@@ -126,8 +136,10 @@ Env(df::DataFrame;
     commission::AbstractFloat = -0.0002,
     lat_ms::Int = 60,
     exclude_cols::Vector{String} = [],
-    scaler::Union{SCALER_TYPE, Nothing} = nothing
-    ) = init_env!(df, w_size, commission, lat_ms, exclude_cols, scaler)
+    scaler::Union{SCALER_TYPE, Nothing} = nothing,
+    start_idx::Int = -1,
+    end_idx::Int = -1
+    ) = init_env!(df, w_size, commission, lat_ms, exclude_cols, scaler, start_idx, end_idx)
 
 # via path to CSV
 # Env(path::String; 
@@ -138,15 +150,15 @@ Env(df::DataFrame;
 #     ) = init_env!(CSV.read(path, DataFrame), w_size, commission, lat_ms, exclude_cols)
 
 # check if we are at the end of dataframe
-done(env::Env) = env.w_size > (nrow(env.data) - env.last_point[] - 1)
+done(env::Env) = env.w_size > (env.end_idx - env.last_point[] - 1)
 
 # set clear episode - with no financial statistics
 function set_up_episode!(
     env::Env, 
-    start_point::Int = 1,
+    start_point::Int = env.start_idx,
     empty_vol::Bool = true
     )
-    @assert start_point < (nrow(env.data) - env.w_size) "Incorrect start pos $(start_point) with rows $(nrow(env.data)) and w_size $(env.w_size)"
+    @assert start_point < (env.end_idx - env.w_size) "Incorrect start pos $(start_point) with end_idx $(env.end_idx) and w_size $(env.w_size)"
     env.last_point[] = start_point
     empty_vol && (env.data.Vol[start_point] = 0.0)
     empty_vol && (env.data.absVol[start_point] = 0.0)
@@ -286,7 +298,7 @@ function simulate!(
     clear_env_at_step::Bool = false,
     clear_every::Int = 5
 )
-    set_up_episode!(env, 1)
+    set_up_episode!(env, env.start_idx)
     res_sim = sim_result([], [], 0.0)
     iter = 0
     while !done(env)

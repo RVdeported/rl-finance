@@ -105,7 +105,8 @@ function train_td3(
     lr_decay_C::AbstractFloat = 0.95,
     t_beta::AbstractFloat = 0.1,
     save_every::Int = -1,
-    save_path_pref::String = "./model"
+    save_path_pref::String = "./model",
+    reg_weights::T = T(1e-4)
 )
     replay_memory = Tuple{Int, Int, Vector{T}, T, Vector{T}, Vector{T}, T}[]
     add_rm(x) = (length(replay_memory) >= replay_memory_len) ? (popfirst!(replay_memory); push!(replay_memory, x)) : push!(replay_memory, x)
@@ -149,7 +150,12 @@ function train_td3(
             mid_px = state_orig.midprice
             state = cu(T[state_dr...])
             
-            actions = cpu(td3.An_model(state))
+            if ep_idx < warm_up_episodes
+                actions = rand(2) .* 0.5
+            else
+                actions = cpu(td3.An_model(state))
+            end
+            
             a_norm += StatsBase.norm(actions)
             # noise = thr(eps_start, eps_end, eps_decay, global_step)
             # actions .+= rand(norm, ddpg.action_space) * noise
@@ -166,7 +172,8 @@ function train_td3(
             end
             
             ex_res = execute!(env, step_, pred_idx == max_ep_len)
-            reward = ex_res.reward
+            # reward = ex_res.reward
+            reward = (ex_res.orders_done == 2) ? 100 : (ex_res.orders_done == 1) ? -20 : 0
             push!(reward_arr, reward)
             step(env, step_)
 
@@ -201,7 +208,8 @@ function train_td3(
             reg_vol = reg_vol,
             reg_action = reg_action,
             rew_offset = rew_offset,
-            t_beta = t_beta
+            t_beta = t_beta,
+            reg_weights = reg_weights
         )
         A_optim[2].eta *= lr_decay_A
         C1_optim[2].eta *= lr_decay_C
@@ -251,7 +259,8 @@ function optimize(
     C1_optim,
     C2_optim,
     t_beta::AbstractFloat = 0.2,
-    reg_action::T = T(1e-5)
+    reg_action::T = T(1e-5),
+    reg_weights::T = T(1e-1)
 )  
     @assert t_beta <= 1.0
     @assert alpha <= 1.0
@@ -297,8 +306,11 @@ function optimize(
     states           = cu(mapreduce(permutedims, vcat, states))
     reg_action_cu = cu(T(reg_action))
 
-    println(states_v_actions[:, 1:3])
-    println(C_labels)
+    # println(states_v_actions[:, 1:3])
+    # println(C_labels)
+
+
+
     C_val, C_grads = Flux.withgradient(td3.C1_model) do m
         loss = cu(0.0)
         for i in 1:size(states_v_actions)[1]
@@ -313,6 +325,7 @@ function optimize(
 
     C_val, C_grads = Flux.withgradient(td3.C2_model) do m
         loss = cu(0.0)
+        # w_reg = sum(sqnorm, Flux.params(m))
         for i in 1:size(states_v_actions)[1]
             q = m(states_v_actions[i, :])
             loss += Flux.mse(q, C_labels[i:i])
@@ -322,17 +335,21 @@ function optimize(
 
     Flux.update!(C2_optim, td3.C2_model, C_grads[1])
     
-    
-    A_val, A_grads = Flux.withgradient(td3.A_model) do m
-        loss = cu([T(0.0)])
-        for i in 1:size(states)[1]
-            q = m(states[i, :])
-            q = td3.C1_model(vcat(states[i, :], q)) - cu([sum(q .^ 2) * reg_action_cu])
-            loss -= q
+    A_val = 0.0
+
+    if !warm
+        A_val, A_grads = Flux.withgradient(td3.A_model) do m
+            loss = cu([T(0.0)])
+            # w_reg = sum(sqnorm, Flux.params(m))
+            for i in 1:size(states)[1]
+                q = m(states[i, :])
+                q = td3.C1_model(vcat(states[i, :], q)) - cu([sum(q .^ 2) * reg_action_cu]) 
+                loss -= q
+            end
+            sum((loss / size(states)[1]))
         end
-        sum((loss / size(states)[1]))
+        Flux.update!(A_optim, td3.A_model, A_grads[1])
     end
-    Flux.update!(A_optim, td3.A_model, A_grads[1])
 
     move(td3)
 

@@ -19,6 +19,7 @@ struct MatchRes
 end
 
 apply_comm(comm, x, sell) = sell ? (1 - comm) * x : (1 + comm) * x
+sqnorm(x) = sum(abs2, x)
 
 function match_orders!(;
     orders::Vector{Order}, 
@@ -89,4 +90,29 @@ function compose_orders(;
     sell_viable && push!(orders, Order(true, sell_qt, mid_px + sell_delta))
     buy_viable && push!(orders, Order(false, buy_qt, max(mid_px - buy_delta, EPS)))
     return orders
+end
+
+struct Test
+    PnL::AbstractFloat
+    reward::Vector{AbstractFloat}
+    loss::AbstractFloat
+    idx_test_start::Int
+    idx_test_end::Int
+    PnL_base::AbstractFloat
+    reward_base::Vector{AbstractFloat}
+    idx_train_start::Int
+    idx_train_end::Int
+end
+
+mutable struct Experiment
+    idx_train_start::Int
+    idx_train_end::Int
+    tests::Vector{Test}
+    loss_init::AbstractFloat
+    loss_init_arr::Vector{AbstractFloat}
+end
+
+mutable struct Run
+    experiments::Vector{Experiment}
+    config::Dict
 end

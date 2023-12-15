@@ -1,5 +1,5 @@
 #--------------general settings-----------------
-path_df: ../data/roman_ETHUSD_c1_d16-28.csv
+path_df: ../data/ETHUSD_VTE_ba_16:28-11.csv
 train_start_idx: 1
 train_end_idx: 905000
 test_start_idx: 910000
@@ -8,39 +8,38 @@ save_every: 1000
 
 #--------------model settings-----------------
 A_layers: 
-    - 64
-    - 8
+    - 128
 C_layers: 
-    - 16
-    # - 4
+    - 128
 
 #--------------training settings-----------------
 #---episodes and replay buffer
-episodes: 500
+episodes: 100000
 eval_every: 100
-max_episode_len: 10
+max_episode_len: 3
 replay_memory_len: 512
 replay_batch: 64
 #---EvE variables
 eps_start:     0.90
 eps_end:       0.05
-eps_decay:     50000
-noise_sigma:   0.2
+eps_decay:     150000
+noise_sigma:   0.05
 noise_mean:    0.0
 #---reward variables
-reg_vol:       0.0
-reg_action:    1e+1
+reg_vol:       40.0
+reg_action:    1e+6
+reg_weights:   1e-2 # not supported
 rew_offset:    5.0
-warm_up_episodes: 50
+warm_up_episodes: 500
 reward_decay:  0.2
 #--- Q calculation: Qp + alpha * (R + gamma * Qt' - Qp)
 alpha:         0.9
 gamma:         0.5
 #---learning rate
-lr_A:          1e-1
+lr_A:          1e-6
 lr_C:          1e-3
-lr_decay_A:    0.995
-lr_decay_C:    0.99
+lr_decay_A:    0.999
+lr_decay_C:    0.999
 gradient_clip: 1e-1
 #---target update settings
 t_beta:        0.1
@@ -89,6 +88,10 @@ exclude_cols:
     - "mean_trend_ws2500_midprice_vwap_v220000.0"
     - "std_trend_ws2500_midprice_vwap_v220000.0"
     - "vol_ws2500_midprice_vwap_v220000.0"
+    - "scaled_std_trend_ws2500_midprice"
+    - "scaled_vol_ws2500_midprice"
+    - "scaled_new_trend_value_ws2500_midprice"
+    - "scaled_new_trend_value_ws2500_midprice_vwap_v220000.0"
 
 
 
