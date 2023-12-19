@@ -96,10 +96,15 @@ struct Test
     PnL::AbstractFloat
     reward::Vector{AbstractFloat}
     loss::AbstractFloat
+    trades::Int
     idx_test_start::Int
     idx_test_end::Int
     PnL_base::AbstractFloat
     reward_base::Vector{AbstractFloat}
+    trades_base::Int
+    PnL_bk::AbstractFloat
+    reward_bk::Vector{AbstractFloat}
+    trades_bk::Int
     idx_train_start::Int
     idx_train_end::Int
 end

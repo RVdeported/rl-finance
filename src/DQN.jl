@@ -22,9 +22,10 @@ function init!(;
     in_feats::Int64,
     out_feats::Int64,
     layers::Vector{Int64},
-    action_space::Vector{Tuple{T, T}}
+    action_space::Vector{Tuple{T, T}},
+    activation::Function = relu
 )
-    model = make_chain(layers, in_feats, out_feats, relu)
+    model = make_chain(layers, in_feats, out_feats, activation)
     
     dqn = DQN(
         model,
@@ -326,3 +327,4 @@ function random_action(
         input_order(env, n)
     end
 end
+

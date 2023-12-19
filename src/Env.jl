@@ -50,7 +50,8 @@ function init_env!(
         exclude_cols::Vector{String} = [],
         scaler::Union{SCALER_TYPE, Nothing} = nothing,
         start_idx::Int = -1,
-        end_idx::Int = -1
+        end_idx::Int = -1,
+        need_to_scale::Bool = true
     )
     
     names_ = names(df)
@@ -80,9 +81,13 @@ function init_env!(
     feats_for_scale = deepcopy(real_feats)
     len_original = ncol(df)
     add_features!(df, real_feats)
-    isnothing(scaler) && (scaler = fit(SCALER_TYPE, Matrix(df[:, feats_for_scale]), dims=1))
-    feats_not_for_scale = symdiff(real_feats, feats_for_scale)
-    scaled = StatsBase.transform(scaler, Matrix(df[:, feats_for_scale]))
+
+    if need_to_scale
+        isnothing(scaler) && (scaler = fit(SCALER_TYPE, Matrix(df[:, feats_for_scale]), dims=1))
+        scaled = StatsBase.transform(scaler, Matrix(df[:, feats_for_scale]))
+    else
+        scaled = Matrix(df[:, feats_for_scale])
+    end
     scaled = DataFrame(scaled, ["scaled_"*n for n in names(df[1:1, feats_for_scale])])
     scaled = hcat(df, scaled)
     feats_for_model = [len_original+1:ncol(scaled)...]
@@ -138,8 +143,9 @@ Env(df::DataFrame;
     exclude_cols::Vector{String} = [],
     scaler::Union{SCALER_TYPE, Nothing} = nothing,
     start_idx::Int = -1,
-    end_idx::Int = -1
-    ) = init_env!(df, w_size, commission, lat_ms, exclude_cols, scaler, start_idx, end_idx)
+    end_idx::Int = -1,
+    need_to_scale::Bool = true
+    ) = init_env!(df, w_size, commission, lat_ms, exclude_cols, scaler, start_idx, end_idx, need_to_scale)
 
 # via path to CSV
 # Env(path::String; 
@@ -164,6 +170,8 @@ function set_up_episode!(
     empty_vol && (env.data.absVol[start_point] = 0.0)
     empty_vol && (env.data.PnL[start_point] = 0.0)
     empty_vol && (env.data.Invested[start_point] = 0.0)
+    empty_vol && (env.data.posted_asks[start_point] = 0.0)
+    empty_vol && (env.data.posted_bids[start_point] = 0.0)
     empty!(env.orders)
     return !done
 end
@@ -304,7 +312,7 @@ function simulate!(
     while !done(env)
         (iter % clear_every == 0) && (set_up_episode!(env, env.last_point[], true))
         # if required, clear all outstanding orders and statistics
-        clear_env_at_step && (set_up_episode!(env, env.last_point[]))
+        # clear_env_at_step && (set_up_episode!(env, env.last_point[]))
         order_action(env, kwargs)
         result = execute!(env, env.w_size)
         push!(res_sim.reward, result.reward)
@@ -337,3 +345,20 @@ function mm_eval(stats::sim_result)
     end
     return order_exec_stats(two_completed, one_completed, no_action, other)
 end
+
+function bk_action(
+    env::Env,
+    kwargs=nothing
+)
+    state = get_state(env)
+    mid_px = state.midprice
+    dA = state["bk"] > 0 ? state["bk"] * 0.5 : 0.01
+    dB = state["bk"] < 0 ? state["bk"] * 0.5 : 0.01
+    orders = [Order(true, 1.0, mid_px + dA), 
+                Order(false, 1.0, mid_px - dB)]
+    for n in orders
+        input_order(env, n)
+    end
+end
+
+count_orders(x::sim_result) = sum(x.executed_orders)

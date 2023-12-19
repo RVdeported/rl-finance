@@ -24,9 +24,10 @@ idx_end = min(nrow(df), c["train_end_idx"])
 
 train_env = Env(
     df[c["train_start_idx"] : idx_end, :];
-    w_size       = c["trading_step"], 
-    commission   = c["commission"], 
-    exclude_cols = c["exclude_cols"],
+    w_size        = c["trading_step"], 
+    commission    = c["commission"], 
+    exclude_cols  = c["exclude_cols"],
+    need_to_scale = true
 )
 
 actions = T.(c["actions"])
@@ -34,13 +35,14 @@ actions = [Iterators.product(actions, actions)...]
 pushfirst!(actions, (0.0, 0.0))
 
 run = Run([], c)
-experiment_len = c["init_train_len"] + c["train_len"] * c["test_num"] + c["test_len"]
+experiment_len = c["init_train_len"] + c["test_step"] * c["test_num"] + c["test_len"]
 for exp_idx in 1:c["n_experiments"]
     dqn = init!(
         in_feats  = length(train_env.feats_for_model),
         out_feats  = length(actions),
         layers    = c["layers"],
-        action_space = actions
+        action_space = actions,
+        activation = tanh
     )
 
     start_idx = round(rand() * (nrow(train_env.data) - experiment_len) - 1)
@@ -48,7 +50,7 @@ for exp_idx in 1:c["n_experiments"]
     train_env.end_idx = start_idx + c["init_train_len"]
     train_env.last_point[] = start_idx
 
-
+    @assert (train_env.start_idx > 0)
     tr_eval, replay_memory = train_dqn(
         dqn,
         train_env;
@@ -100,7 +102,7 @@ for exp_idx in 1:c["n_experiments"]
             step_= c["window_step"],
             replay_memory_len=c["replay_memory_len"],
             replay_batch=c["replay_batch"],     
-            warm_up_episodes = c["warm_up_episodes"],
+            warm_up_episodes = 0,
             alpha = T(c["alpha"]),
             gamma = T(c["gamma"]),
             eval_every = 99999999,
@@ -131,26 +133,36 @@ for exp_idx in 1:c["n_experiments"]
                 train_env, 
                 order_action=order_action, 
                 step_=c["window_step"], 
-                kwargs=dqn)
+                kwargs=dqn,
+                clear_every=1)
         res_rand = simulate!(
                 train_env, 
                 order_action=random_action, 
                 step_=c["window_step"], 
-                kwargs=dqn)
+                kwargs=dqn,
+                clear_every=1)
+        res_bk = simulate!(
+                train_env, 
+                order_action=bk_action, 
+                step_=c["window_step"], 
+                kwargs=nothing,
+                clear_every=1)
         move(dqn, false, false)
 
-        test = Test(sum(res.reward), res.reward, dqn.stats["loss"][end], 
-                train_env.start_idx, train_env.end_idx, sum(res_rand.reward), 
-                res_rand.reward, train_idx_start, train_idx_end)
+        test = Test(sum(res.reward), res.reward, dqn.stats["loss"][end],
+                count_orders(res), train_env.start_idx, train_env.end_idx, 
+                sum(res_rand.reward), res_rand.reward, count_orders(res_rand),
+                sum(res_bk.reward), res_bk.reward, count_orders(res_bk),
+                train_idx_start, train_idx_end)
         push!(exper.tests, test)
-        println("$(dqn.stats["loss"][end]), $(sum(res.reward)) ,$(sum(res.reward[:20])) | $(res_rand.PnL[]), ,$(sum(res_rand.reward[:20]))")
+        println("$(dqn.stats["loss"][end]), $(sum(res.reward)) ,$(sum(res.reward[:20])) | $(res_rand.PnL[]) ,$(sum(res_rand.reward[:20])) | $(res_bk.PnL[]) ,$(sum(res_bk.reward[:20]))")
         train_env.start_idx   = old_start
         train_env.end_idx     = old_end
 
     end # end of tests
     push!(run.experiments, exper)
 
-    if (c["save_every"] % exp_idx == 0)
+    if (exp_idx % c["save_every"]  == 0)
         res = run
         @save "$PATH_PREFIX/$FILE_PREFIX/$(FILE_PREFIX)_$exp_idx.jld2" res
     end
