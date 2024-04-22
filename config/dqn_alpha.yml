@@ -1,34 +1,36 @@
 #--------------general settings-----------------
-path_df: ../data/ETHUSD_VTE_ba_16:28-11.csv
-train_start_idx: 1
-train_end_idx: 905000
-test_start_idx: 910000
-test_end_idx: end
-save_every: 1000
+path_df: /home/ugrek/Maquette/data/TEST_features.csv
+train_start_idx: 10000
+train_end_idx:   3000000
+test_start_idx:  5000
+test_end_idx:    100000
+save_every: 10000
 
 #--------------model settings-----------------
+# in BPs!
 actions:
-    - 0.1
-    - 1.0
+    - 5
+    - 30
+    - 200
 layers: 
-    - 64
-    - 8
+    - 256
+    - 32
 
 #--------------training settings-----------------
 #---episodes and replay buffer
-episodes: 120000
-max_episode_len: 3
+episodes: 20000
+max_episode_len: 100
 replay_memory_len: 512
 replay_batch: 64
-eval_every: 100
+eval_every: 100000
 #---EvE variables
 eps_start:     0.90
 eps_end:       0.05
 eps_decay:     500000
 #---reward variables
 reward_decay:  0.3
-reg_vol:       50.0
-warm_up_episodes: 100
+reg_vol:       5.0
+warm_up_episodes: 1000
 #--- Q calculation: Qp + alpha * (R + gamma * Qt' - Qp)
 alpha:         0.9
 gamma:         0.5
@@ -43,8 +45,8 @@ merge_alpha: 0.3
 
 #--------------env settings-----------------
 commission: -0.0002    
-trading_step: 200      # how far we predict
-window_step: 10
+trading_step: 9000      # how far we predict
+window_step: 5
 exclude_cols:
     - "target"
     - "target_min"

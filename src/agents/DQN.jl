@@ -7,15 +7,19 @@ using StatsBase
 using Printf
 using Setfield
 using JLD2
+using Base
 # include("../tools/Env.jl")
 # include("../tools/BaseTypes.jl")
 
 T = Float32
-struct DQN <: RLModel
-    target_model::Ref{Chain}
+mutable struct DQN <: RLModel
+    target_model ::Ref{Chain}
     predict_model::Ref{Chain}
-    action_space::Vector{Tuple{T, T}} # buy and sell offset
-    stats::Dict{String, Vector}
+    action_space ::Vector{Any} # buy and sell offset
+    stats        ::Dict{String, Vector}
+    action_type  ::ActionType
+    mm_ou        ::MRbase    
+    env          ::Union{Nothing, Env}       
 end
 
 
@@ -23,11 +27,17 @@ function init!(;
     in_feats::Int64,
     out_feats::Int64,
     layers::Vector{Int64},
-    action_space::Vector{Tuple{T, T}},
-    activation::Function = relu
+    action_space::Vector{Any},
+    activation::Function = relu,
+    action_type::ActionType = spread,
+    mm_ou::MRbase           = nothing
 )
     model = make_chain(layers, in_feats, out_feats, activation)
     
+    @assert(action_type == spread || !isnothing(MRbase))
+    @assert(action_type != OU     || length(action_space[1]) == 3)
+    @assert(action_type != spread || length(action_space[1]) == 2)
+
     dqn = DQN(
         model,
         deepcopy(model),
@@ -39,7 +49,10 @@ function init!(;
             "vol_left" => [],
             "randoms" => [],
             "lr" => []
-        )
+        ),
+        action_type,
+        mm_ou,
+        nothing
     )
     return dqn
 end
@@ -49,7 +62,20 @@ function move(dqn::DQN, target_gpu::Bool, predict_gpu::Bool)
     dqn.target_model[] = fmap(target_gpu ? cu : cpu,  dqn.target_model[])
 end
 
+#-----------------------------------------------------------------------------#
+# Compose order variations                                                    #
+#-----------------------------------------------------------------------------#
 function compose_orders(dqn::DQN, action_idx::Int, mid_px::T)
+    #TODO: replace with type distribution
+    if      dqn.action_type == spread
+        return compose_orders_spread(dqn, action_idx, mid_px)
+    elseif  dqn.action_type == OU
+        return compose_orders_ou(    dqn, action_idx, mid_px)
+    end
+    @assert(false)
+end
+
+function compose_orders_spread(dqn::DQN, action_idx::Int, mid_px::T)
     orders = []
     qt1 = dqn.action_space[action_idx][1]
     qt2 = dqn.action_space[action_idx][2]
@@ -57,11 +83,28 @@ function compose_orders(dqn::DQN, action_idx::Int, mid_px::T)
 
     ((qt1 < 0.0001) && (qt2 < 0.0001)) && return []
 
-    push!(orders, Order(true, 1.0, mid_px + qt1))
-    push!(orders, Order(false, 1.0, mid_px - qt2))
+    # TODO: make qty from config
+    push!(orders, Order(true,  1.0, mid_px * (1.0 + qt1)))
+    push!(orders, Order(false, 1.0, mid_px * (1.0 + qt2)))
     return orders
 end
 
+function compose_orders_ou(dqn::DQN, action_idx::Int, mid_px::T)
+    orders = []
+
+    # here it is asserted that action space is of lenght 3
+    ou_bias   = dqn.action_space[action_idx]
+    quotes = quote_ou(dqn.mm_ou, dqn.env, ou_bias...) 
+
+    ((quotes[1] < 0.0001) && (quotes[2] < 0.0001)) && return []
+
+    print("Quoting at $(quotes[1])...$(quotes[2]), action $ou_bias\n")
+
+    # TODO: make qty from config
+    push!(orders, Order(true,  1.0, quotes[1]))
+    push!(orders, Order(false, 1.0, quotes[2]))
+    return orders
+end
 
 
 function train_dqn(
@@ -91,10 +134,11 @@ function train_dqn(
     save_every = -1,
     save_path_pref = "./dqn",
     one_pass::Bool = false,
-    replay_memory::Vector{Tuple{Int, Int, Int, T, Vector{T}, Vector{T}, T}} = []
+    replay_memory::Vector{Tuple{Int, Int, Int, T, Vector{T}, Vector{T}, T}} = Vector{Tuple{Int, Int, Int, T, Vector{T}, Vector{T}, T}}()
 )
     add_rm(x) = (length(replay_memory) >= replay_memory_len) ? (popfirst!(replay_memory); push!(replay_memory, x)) : push!(replay_memory, x)
     eval_res = []
+    dqn.env = env
     move(dqn, false, true)
 
     optim = Flux.Optimise.Optimiser(ClipValue(gradient_clip), ADAM(lr))
@@ -302,6 +346,7 @@ function order_action(
     env::Env,
     dqn::DQN
 )
+    dqn.env = env
     state = get_state(env)
     scaled_state = get_state(env, true)
     mid_px = state.midprice
@@ -319,6 +364,7 @@ function random_action(
     env::Env,
     dqn::DQN
 )
+    dqn.env = env
     state = get_state(env)
     mid_px = state.midprice
     action_idx = Int64(round(rand() * (length(dqn.action_space) - 1)) + 1)

@@ -1,9 +1,9 @@
 #--------------general settings-----------------
-path_df: ../data/roman_ETHUSD_c1_d16-28.csv
-train_start_idx: 1
-train_end_idx: 905000
-test_start_idx: 910000
-test_end_idx: end
+path_df: /home/ugrek/Maquette/data/TEST_features.csv
+train_start_idx: 200000
+train_end_idx:   5000000
+test_start_idx:  5000
+test_end_idx:    100000
 
 #--------------model settings-----------------
 A_layers: 
@@ -17,8 +17,8 @@ C_layers:
 #---episodes and replay buffer
 episodes: 4000
 eval_every: 100
-max_episode_len: 10
-replay_memory_len: 512
+max_episode_len: 100
+replay_memory_len: 2048
 replay_batch: 64
 #---EvE variables
 eps_start:     0.90
@@ -33,7 +33,7 @@ rew_offset:    5.0
 warm_up_episodes: 50
 reward_decay:  0.2
 #--- Q calculation: Qp + alpha * (R + gamma * Qt' - Qp)
-alpha:         0.9
+alpha:         0.3
 gamma:         0.5
 #---learning rate
 lr_A:          1e-2
@@ -45,8 +45,8 @@ gradient_clip: 1e-1
 t_beta:        0.2
 
 #--------------env settings-----------------
-trading_step: 200
-window_step: 20
+trading_step: 1500
+window_step:  20
 commission: -0.0002
 exclude_cols:
     # - "target"

@@ -4,6 +4,8 @@ EPS = 1e-4
 
 abstract type RLModel end
 
+@enum ActionType spread OU
+
 struct Order
     side_ask::Bool
     qt::AbstractFloat

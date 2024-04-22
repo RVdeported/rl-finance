@@ -77,22 +77,23 @@ function init_env!(
     #-----------------------------------#
     # clear non-required instrs         #
     #-----------------------------------#
-    for name in names_
-        if name == "ts"
-            continue
-        end
-        instr_df = name[1:findfirst("_o_", name)[1] - 1]
-        # print(instr)
-        if instr != instr_df
-            print("Removing " * name * "\n")
-            select!(df, Not(name))
-        end
-    end
+    # for name in names_
+    #     if name == "ts"
+    #         continue
+    #     end
+    #     print(findfirst("_o_", name)[1] - 1)
+    #     instr_df = name[1:findfirst("_o_", name)[1] - 1]
+    #     # print(instr)
+    #     if instr != instr_df
+    #         print("Removing " * name * "\n")
+    #         select!(df, Not(name))
+    #     end
+    # end
 
     # we need to look through all columns and distribute them among 
     # real features, date features and non-real values
     for (i, n) in enumerate(eltype.(eachcol(df))) 
-        if names_[i] in exclude_cols
+        if names(df)[i] in exclude_cols
             continue
         elseif n <: Int
             push!(date_feats, i)
@@ -322,7 +323,8 @@ function simulate!(
     step_::Int,
     kwargs,                     # anything needed for order_action()
     clear_env_at_step::Bool = false,
-    clear_every::Int = 5
+    clear_every::Int = 5,
+    reailize_gain_on_step::Bool = true
 )
     set_up_episode!(env, env.start_idx)
     res_sim = sim_result([], [], 0.0)
@@ -332,7 +334,7 @@ function simulate!(
         # if required, clear all outstanding orders and statistics
         # clear_env_at_step && (set_up_episode!(env, env.last_point[]))
         order_action(env, kwargs)
-        result = execute!(env, env.w_size)
+        result = execute!(env, env.w_size, reailize_gain_on_step)
         push!(res_sim.reward, result.reward)
         push!(res_sim.executed_orders, result.orders_done)
         step(env, step_)
