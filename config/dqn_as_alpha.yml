@@ -1,0 +1,111 @@
+#--------------general settings-----------------
+path_df: /home/ugrek/Maquette/data/TEST_features.csv
+train_start_idx: 10000
+train_end_idx:   3000000
+test_start_idx:  5000
+test_end_idx:    100000
+save_every: 10000
+
+#--------------model settings-----------------
+# in BPs!
+# actions:
+#     - 5
+#     - 30
+#     - 200
+# modes: spread, ou, as
+mode: as
+as_alpha: 0.4
+as_k:     1.5
+as_gamma: 5.0
+as_alpha_vars:
+    -  0.0
+    -  0.5
+    - -0.5
+as_k_vars:
+    -  0.0
+    -  0.5
+    - -0.5
+as_gamma_vars:
+    -  0.0
+    -  1.5
+    - -1.5
+layers: 
+    - 1024
+    - 256
+    - 128
+
+#--------------training settings-----------------
+#---episodes and replay buffer
+episodes: 10000
+max_episode_len: 1000
+replay_memory_len: 2048
+replay_batch: 128
+eval_every: 300000
+#---EvE variables
+eps_start:     0.90
+eps_end:       0.05
+eps_decay:     500000
+#---reward variables
+reward_decay:  0.3
+reg_vol:       5.0
+warm_up_episodes: 1000
+#--- Q calculation: Qp + alpha * (R + gamma * Qt' - Qp)
+alpha:         0.9
+gamma:         0.5
+#---learning rate
+lr:            1e-4
+lr_decay:      0.9999
+gradient_clip: 1e-2
+#---target update settings
+merge_dqns_every: 10  # not important if merge_soft == True
+merge_soft: true
+merge_alpha: 0.3
+
+#--------------env settings-----------------
+commission: -0.0002    
+trading_step: 100      # how far we predict
+window_step:  99
+need_to_scale: false
+exclude_cols:
+    - "target"
+    - "target_min"
+    - "target_max" 
+    # - "midprice_vwap_v220000.0"
+    - "vwap_midprice_diff_v220000.0"
+    - "midprice_vwap_v130000.0"
+    - "vwap_midprice_diff_v130000.0"
+    - "log_vwap_midprice_ratio_v220000.0"
+    - "nlrr_ws100"
+    - "nlrr_ws500" 
+    - "nlrr_ws2500" 
+    # - "mean_trend_ws100_midprice"
+    # - "std_trend_ws100_midprice"
+    # - "vol_ws100_midprice"
+    - "mean_trend_ws500_midprice"
+    - "std_trend_ws500_midprice"
+    - "vol_ws500_midprice"
+    - "mean_trend_ws100_midprice_vwap_v130000.0"
+    - "std_trend_ws100_midprice_vwap_v130000.0"
+    - "vol_ws100_midprice_vwap_v130000.0"
+    - "mean_trend_ws500_midprice_vwap_v130000.0"
+    - "std_trend_ws500_midprice_vwap_v130000.0"
+    - "vol_ws500_midprice_vwap_v130000.0"
+    - "mean_trend_ws100_midprice_vwap_v220000.0"
+    - "std_trend_ws100_midprice_vwap_v220000.0"
+    - "vol_ws100_midprice_vwap_v220000.0"
+    - "mean_trend_ws500_midprice_vwap_v220000.0"
+    - "std_trend_ws500_midprice_vwap_v220000.0"
+    - "vol_ws500_midprice_vwap_v220000.0"
+    - "new_trend_value_ws100_midprice"
+    - "new_trend_value_ws100_midprice_vwap_v130000.0"
+    - "new_trend_value_ws100_midprice_vwap_v220000.0"
+    - "new_trend_value_ws500_midprice"
+    - "new_trend_value_ws500_midprice_vwap_v130000.0"
+    - "new_trend_value_ws500_midprice_vwap_v220000.0"
+    - "mean_trend_ws2500_midprice_vwap_v130000.0"
+    - "mean_trend_ws2500_midprice_vwap_v220000.0"
+    - "std_trend_ws2500_midprice_vwap_v220000.0"
+    - "vol_ws2500_midprice_vwap_v220000.0"
+
+
+

@@ -47,6 +47,7 @@ merge_alpha: 0.3
 commission: -0.0002    
 trading_step: 9000      # how far we predict
 window_step: 5
+need_scale: false
 exclude_cols:
     - "target"
     - "target_min"

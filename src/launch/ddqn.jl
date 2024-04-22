@@ -1,10 +1,11 @@
 using Pkg
 Pkg.activate("./alp")
 Pkg.instantiate()
-using YAML, Plots, JLD2
+using YAML, Plots, JLD2, Match
 include("../tools/BaseTypes.jl")
 include("../tools/Env.jl")
 include("../agents/MRbase.jl")
+include("../agents/AS.jl")
 include("../agents/DQN.jl")
 # include("DDPG.jl")
 
@@ -27,7 +28,7 @@ train_env = Env(
     w_size       = c["trading_step"], 
     commission   = c["commission"], 
     exclude_cols = ["fjh"],
-    need_to_scale=false
+    need_to_scale= c["need_to_scale"]
 )
 test_env = Env(
     df[c["test_start_idx"] : c["test_end_idx"], :],
@@ -35,6 +36,7 @@ test_env = Env(
     w_size       = c["trading_step"], 
     commission   = c["commission"], 
     exclude_cols = ["fjh"],
+    need_to_scale = c["need_to_scale"],
     scaler = train_env.scaler
 )
 
@@ -42,14 +44,33 @@ test_env = Env(
 # actions = [Iterators.product(actions, actions)...]
 # pushfirst!(actions, (0.0, 0.0))
 
-actions::Vector{Any} = [
-    (0.0,  0.0,  0.0),
-    (0.0,  0.1,  0.0),
-    (0.0, -0.1,  0.0),
-    (0.0,  0.0,  1.0),
-    (0.0,  0.0, -1.0),
-]
-mr = init_mr!(3.0, 1.0, 5.0, 1.0)
+#----------------------------------------#
+# defining mode -specifics               #
+#----------------------------------------#
+mode = @match c["mode"] begin
+    "spread" => spread
+    "ou"     => OU
+    "as"     => AS
+end
+
+mr = nothing
+as = nothing
+actions::Vector{Any} = []
+
+if mode == AS
+    as = init_as!(c["as_alpha"], c["as_k"], c["as_gamma"])
+    actions = [Iterators.product(T.(c["as_alpha_vars"]), T.(c["as_k_vars"]), T.(c["as_gamma_vars"]))...]
+elseif mode == OU
+    mr = init_mr!(c["mr_in_k"], c["mr_out_k"], c["mr_crit_k"], c["mr_pos_vol"],
+                  c["mr_min_pr"] / 10000, c["mr_use_VWAP"])
+    actions = [Iterators.product(T.(c["mr_inK_vars"]), T.(c["mr_outK_vars"]), T.(c["mr_critK_vars"]))...]
+elseif mode == spread
+    action_base = T.(c["actions"]) ./ 10000.0
+    actions     = [Iterators.product(action_base, action_base)...]
+    pushfirst!(actions, (0.0, 0.0))
+end
+
+@assert(length(actions) > 0)
 
 dqn = init!(
     in_feats     = length(train_env.feats_for_model),
@@ -57,9 +78,13 @@ dqn = init!(
     layers       = c["layers"],
     action_space = actions,
     mm_ou        = mr,
-    action_type  = OU
+    mm_as        = as,
+    action_type  = mode
 )
 
+#-----------------------------------------#
+# Launch train-eval                       #
+#-----------------------------------------#
 eval_res = train_dqn(
     dqn,
     train_env;

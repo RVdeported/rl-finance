@@ -18,7 +18,8 @@ mutable struct DQN <: RLModel
     action_space ::Vector{Any} # buy and sell offset
     stats        ::Dict{String, Vector}
     action_type  ::ActionType
-    mm_ou        ::MRbase    
+    mm_ou        ::Union{Nothing, MRbase}    
+    mm_as        ::Union{Nothing, ASbase}    
     env          ::Union{Nothing, Env}       
 end
 
@@ -30,12 +31,14 @@ function init!(;
     action_space::Vector{Any},
     activation::Function = relu,
     action_type::ActionType = spread,
-    mm_ou::MRbase           = nothing
+    mm_ou::Union{Nothing, MRbase} = nothing,
+    mm_as::Union{Nothing, ASbase} = nothing
 )
     model = make_chain(layers, in_feats, out_feats, activation)
     
     @assert(action_type == spread || !isnothing(MRbase))
-    @assert(action_type != OU     || length(action_space[1]) == 3)
+    @assert(action_type != OU     || (length(action_space[1]) == 3 && !isnothing(mm_ou)))
+    @assert(action_type != AS     || (length(action_space[1]) == 3 && !isnothing(mm_as)))
     @assert(action_type != spread || length(action_space[1]) == 2)
 
     dqn = DQN(
@@ -52,6 +55,7 @@ function init!(;
         ),
         action_type,
         mm_ou,
+        mm_as,
         nothing
     )
     return dqn
@@ -71,6 +75,8 @@ function compose_orders(dqn::DQN, action_idx::Int, mid_px::T)
         return compose_orders_spread(dqn, action_idx, mid_px)
     elseif  dqn.action_type == OU
         return compose_orders_ou(    dqn, action_idx, mid_px)
+    elseif  dqn.action_type == AS
+        return compose_orders_as(    dqn, action_idx, mid_px)
     end
     @assert(false)
 end
@@ -103,6 +109,23 @@ function compose_orders_ou(dqn::DQN, action_idx::Int, mid_px::T)
     # TODO: make qty from config
     push!(orders, Order(true,  1.0, quotes[1]))
     push!(orders, Order(false, 1.0, quotes[2]))
+    return orders
+end
+
+function compose_orders_as(dqn::DQN, action_idx::Int, mid_px::T)
+    orders = []
+
+    # here it is asserted that action space is of lenght 3
+    as_bias   = dqn.action_space[action_idx]
+    quotes = quote_as(dqn.mm_as, dqn.env, as_bias...) 
+
+    ((quotes[1] < 0.0001) && (quotes[2] < 0.0001)) && return []
+
+    # print("Quoting at $(quotes[1])...$(quotes[2]), action $as_bias\n")
+
+    # TODO: make qty from config
+    (quotes[1] > 0.0) && push!(orders, Order(true,  1.0, quotes[1]))
+    (quotes[2] > 0.0) && push!(orders, Order(false, 1.0, quotes[2]))
     return orders
 end
 

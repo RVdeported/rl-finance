@@ -4,7 +4,7 @@ EPS = 1e-4
 
 abstract type RLModel end
 
-@enum ActionType spread OU
+@enum ActionType spread OU AS
 
 struct Order
     side_ask::Bool
