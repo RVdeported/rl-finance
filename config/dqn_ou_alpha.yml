@@ -5,6 +5,7 @@ train_end_idx:   3000000
 test_start_idx:  5000
 test_end_idx:    100000
 save_every: 10000
+type:            dqn
 
 #--------------model settings-----------------
 # in BPs!
@@ -13,7 +14,7 @@ save_every: 10000
 #     - 30
 #     - 200
 # modes: spread, ou, as
-mode: as
+mode: ou
 mr_out_k:    1.5
 mr_in_k:     3.0
 mr_crit_k:   5.0
@@ -21,18 +22,18 @@ mr_pos_vol:  1.0
 mr_min_pr:   5 # in BPs!
 mr_use_VWAP: true
 
-_alpha_vars:
+mr_in_k_vars:
     -  0.0
     -  0.5
     - -0.5
-as_k_vars:
+mr_out_k_vars:
     -  0.0
     -  0.5
     - -0.5
-as_gamma_vars:
+mr_crit_k_vars:
     -  0.0
-    -  1.5
-    - -1.5
+    -  1.0
+    - -1.0
 layers: 
     - 1024
     - 256

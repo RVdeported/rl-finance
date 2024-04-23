@@ -17,13 +17,18 @@ mutable struct DDPG <: RLModel
     An_model::Chain
     action_space::Int # number of outputs of type T
     stats::Dict{String, Vector}
+    action_type  ::ActionType
+    stat_algo    ::Union{Nothing, StatAlgo}    
+    env          ::Union{Nothing, Env}       
 end
 
 function init_ddpg!(;
     in_feats::Int64,
     A_layers::Vector{Int64},
     C_layers::Vector{Int64},
-    action_space::Int = 2
+    action_space::Int = 2,    
+    action_type::ActionType = spread,
+    stat_algo::Union{Nothing, StatAlgo} = nothing,
 )
     A = make_chain(A_layers, in_feats, action_space, Flux.relu)
     C = make_chain(C_layers, in_feats + action_space, 1, Flux.relu)
@@ -45,8 +50,16 @@ function init_ddpg!(;
             "lr" => [],
             "C_labels" => [],
             "a_norm" => []
-        )
+        ),
+        action_type,
+        stat_algo,
+        nothing
     )
+
+    @assert(action_type != OU     || (action_space == 3 && stat_algo isa MRbase))
+    @assert(action_type != AS     || (action_space == 3 && stat_algo isa ASbase))
+    @assert(action_type != spread || action_space == 2)
+
     return ddpg
 end
 
@@ -95,6 +108,7 @@ function train_ddpg(
     lr_decay_C::AbstractFloat = 0.95,
     t_beta::AbstractFloat = 0.1
 )
+    ddpg.env = env
     replay_memory = Tuple{Int, Int, Vector{T}, T, Vector{T}, Vector{T}, T}[]
     add_rm(x) = (length(replay_memory) >= replay_memory_len) ? (popfirst!(replay_memory); push!(replay_memory, x)) : push!(replay_memory, x)
     eval_res = []
@@ -143,9 +157,9 @@ function train_ddpg(
             global_step += 1
 
             orders = compose_orders(
-                sell_delta = abs(actions[1]), 
-                buy_delta  = abs(actions[2]), 
-                mid_px = mid_px)
+                model   = ddpg,
+                actions = actions,
+                mid_px  = mid_px)
 
             for n in orders
                 input_order(env, n)
@@ -202,7 +216,7 @@ function train_ddpg(
         
         if (ep_idx % eval_every == 0) && !(isnothing(eval_env))
             move(ddpg, true, false)
-            res = simulate!(eval_env, order_action=order_action_ddpg, step_=step_, kwargs=ddpg)
+            res = simulate!(eval_env, order_action=order_action, step_=step_, kwargs=ddpg)
             push!(eval_res, res)
             move(ddpg, false, false)
         end
@@ -302,7 +316,7 @@ function optimize(
     return Dict("A_loss" => A_val, "C_loss" => C_val, "labels" => mean(cpu(C_labels)))
 end
 
-function order_action_ddpg(
+function order_action(
     env::Env,
     ddpg::DDPG
 )
@@ -311,9 +325,10 @@ function order_action_ddpg(
     mid_px = state.midprice
     scaled_state = cu([scaled_state...])
     action_idx = cpu(ddpg.A_model(scaled_state))
-    orders = compose_orders(sell_delta = abs(action_idx[1]), 
-                            buy_delta = abs(action_idx[2]), 
-                            mid_px = mid_px)
+    orders = compose_orders(
+        model = ddpg,
+        actions = action_idx, 
+        mid_px = mid_px)
     for n in orders
         # display(n)
         input_order(env, n)

@@ -4,10 +4,12 @@ train_start_idx: 10000
 train_end_idx:   3000000
 test_start_idx:  5000
 test_end_idx:    100000
-save_every: 10000
+save_every:      10000
+type:            dqn
 
 #--------------model settings-----------------
 # in BPs!
+mode: spread
 actions:
     - 5
     - 30

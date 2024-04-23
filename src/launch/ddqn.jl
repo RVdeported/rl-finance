@@ -27,7 +27,7 @@ train_env = Env(
     "BTCUSDT_FutT";
     w_size       = c["trading_step"], 
     commission   = c["commission"], 
-    exclude_cols = ["fjh"],
+    exclude_cols = c["exclude_cols"],
     need_to_scale= c["need_to_scale"]
 )
 test_env = Env(
@@ -35,14 +35,10 @@ test_env = Env(
     "BTCUSDT_FutT"; 
     w_size       = c["trading_step"], 
     commission   = c["commission"], 
-    exclude_cols = ["fjh"],
+    exclude_cols = c["exclude_cols"],
     need_to_scale = c["need_to_scale"],
     scaler = train_env.scaler
 )
-
-# actions = T.(c["actions"]) ./ 10000.0
-# actions = [Iterators.product(actions, actions)...]
-# pushfirst!(actions, (0.0, 0.0))
 
 #----------------------------------------#
 # defining mode -specifics               #
@@ -53,17 +49,15 @@ mode = @match c["mode"] begin
     "as"     => AS
 end
 
-mr = nothing
-as = nothing
+stat_algo = nothing
 actions::Vector{Any} = []
 
 if mode == AS
-    as = init_as!(c["as_alpha"], c["as_k"], c["as_gamma"])
-    actions = [Iterators.product(T.(c["as_alpha_vars"]), T.(c["as_k_vars"]), T.(c["as_gamma_vars"]))...]
+    stat_algo = init_as!(c)
+    actions   = [Iterators.product(T.(c["as_alpha_vars"]), T.(c["as_k_vars"]), T.(c["as_gamma_vars"]))...]
 elseif mode == OU
-    mr = init_mr!(c["mr_in_k"], c["mr_out_k"], c["mr_crit_k"], c["mr_pos_vol"],
-                  c["mr_min_pr"] / 10000, c["mr_use_VWAP"])
-    actions = [Iterators.product(T.(c["mr_inK_vars"]), T.(c["mr_outK_vars"]), T.(c["mr_critK_vars"]))...]
+    stat_algo = init_mr!(c)
+    actions   = [Iterators.product(T.(c["mr_in_k_vars"]), T.(c["mr_out_k_vars"]), T.(c["mr_crit_k_vars"]))...]
 elseif mode == spread
     action_base = T.(c["actions"]) ./ 10000.0
     actions     = [Iterators.product(action_base, action_base)...]
@@ -77,8 +71,7 @@ dqn = init!(
     out_feats    = length(actions),
     layers       = c["layers"],
     action_space = actions,
-    mm_ou        = mr,
-    mm_as        = as,
+    stat_algo    = stat_algo,
     action_type  = mode
 )
 

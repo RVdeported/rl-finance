@@ -1,8 +1,10 @@
 using Pkg
-Pkg.activate("../alp")
+Pkg.activate("./alp")
 using YAML, Plots, JLD2
-include("../tools/Env.jl")
 include("../tools/BaseTypes.jl")
+include("../tools/Env.jl")
+include("../agents/MRbase.jl")
+include("../agents/AS.jl")
 include("../agents/DDPG.jl")
 
 @assert length(ARGS) > 0
@@ -11,8 +13,9 @@ include("../agents/DDPG.jl")
 # (length(ARGS) > 1) && (warm_start = Bool(ARGS[2]))
 
 FILE_PREFIX = ARGS[1]
-CONFIG = "../config/$FILE_PREFIX.yml"
-OUT_PATH = "../experiments/$FILE_PREFIX.jld2"
+CONFIG = "./config/$FILE_PREFIX.yml"
+PATH_PREFIX = "/media/ugrek/Backup/rl-finance"
+OUT_PATH = "$PATH_PREFIX/$FILE_PREFIX.jld2"
 c = YAML.load_file(CONFIG)
 
 PATH = c["path_df"]
@@ -20,31 +23,55 @@ PATH = c["path_df"]
 df = CSV.read(PATH, DataFrame)
 
 train_env = Env(
-    df[c["train_start_idx"] : c["train_end_idx"], :]; 
+    df[c["train_start_idx"] : c["train_end_idx"], :],
+    "BTCUSDT_FutT";
     w_size       = c["trading_step"], 
     commission   = c["commission"], 
     exclude_cols = c["exclude_cols"],
+    need_to_scale= c["need_to_scale"]
 )
 test_env = Env(
-    df[c["test_start_idx"] : end, :]; 
-    w_size       = c["trading_step"], 
-    commission   = c["commission"], 
-    exclude_cols = c["exclude_cols"],
+    df[c["test_start_idx"] : c["test_end_idx"], :],
+    "BTCUSDT_FutT"; 
+    w_size       =  c["trading_step"], 
+    commission   =  c["commission"], 
+    exclude_cols =  c["exclude_cols"],
+    need_to_scale = c["need_to_scale"],
     scaler = train_env.scaler
 )
 
+#----------------------------------------#
+# defining mode -specifics               #
+#----------------------------------------#
+mode = @match c["mode"] begin
+    "spread" => spread
+    "ou"     => OU
+    "as"     => AS
+end
 
-# if !warm_start
+stat_algo = nothing
+action_space = -1
+
+if mode == AS
+    stat_algo = init_as!(c)
+    action_space = 3
+elseif mode == OU
+    stat_algo = init_mr!(c)
+    action_space = 3
+elseif mode == spread
+    action_space = 2
+else
+    @assert(false)
+end
+
 ddpg = init_ddpg!(
     in_feats = length(train_env.feats_for_model),
     A_layers = c["A_layers"],
     C_layers = c["C_layers"],
-    action_space = 2
+    action_space = action_space,
+    action_type = mode,
+    stat_algo = stat_algo
 )
-# else
-#     @load OUT_PATH
-#     ddpg = res["model"]
-# end
 
 eval_res = train_ddpg(
     ddpg,

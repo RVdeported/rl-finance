@@ -1,6 +1,6 @@
 using Match
 
-mutable struct MRbase
+mutable struct MRbase <: StatAlgo
     in_k    ::AbstractFloat
     out_k   ::AbstractFloat
     crit_k  ::AbstractFloat
@@ -30,7 +30,12 @@ function init_mr!(
                     use_VWAP)
 end
 
-function quote_ou(
+function init_mr!(c::Dict)
+    return init_mr!(c["mr_in_k"], c["mr_out_k"], c["mr_crit_k"], c["mr_pos_vol"],
+        c["mr_min_pr"] / 10000, c["mr_use_VWAP"])
+end
+
+function quote_(
     mr_params::MRbase, 
     env::Env,
     theta_bias::AbstractFloat = 0.0, 
@@ -95,7 +100,7 @@ function quote_ou(
     return res
 end
 
-function order_action_MMbase(env::Env, mr_params::MRbase)
+function order_action(env::Env, mr_params::MRbase)
     pxs = quote_ou(mr_params, env)
     
     if (pxs[1] > 0.0 && pxs[2] > 0.0)

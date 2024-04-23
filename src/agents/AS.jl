@@ -1,6 +1,6 @@
 using Distributions
 
-mutable struct ASbase
+mutable struct ASbase <: StatAlgo
     alpha::AbstractFloat
     k::AbstractFloat
     gamma::AbstractFloat
@@ -17,7 +17,11 @@ function init_as!(
     return ASbase(a_alpha, a_k, a_gamma, a_dT)
 end
 
-function quote_as(
+function init_as!(c::Dict)
+    return init_as!(c["as_alpha"], c["as_k"], c["as_gamma"])
+end
+
+function quote_(
     as::ASbase, 
     env::Env, 
     alpha_bias::AbstractFloat = 0.0,
@@ -72,11 +76,11 @@ function quote_as(
     return res
 end
 
-function order_action_as(
+function order_action(
     env::Env,
     as::ASbase
 )
-    quotes = quote_as(as, env)
+    quotes = quote_(as, env)
 
     (quotes[1] > 0.0) && input_order(env, Order(true, 1.0, quotes[1]))
     (quotes[2] > 0.0) && input_order(env, Order(false, 1.0, quotes[2]))

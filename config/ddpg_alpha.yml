@@ -1,11 +1,14 @@
 #--------------general settings-----------------
 path_df: /home/ugrek/Maquette/data/TEST_features.csv
 train_start_idx: 200000
-train_end_idx:   5000000
+train_end_idx:   4000000
 test_start_idx:  5000
 test_end_idx:    100000
+type:            ddpg
 
 #--------------model settings-----------------
+mode: spread
+
 A_layers: 
     - 256
     - 16
@@ -45,49 +48,13 @@ gradient_clip: 1e-1
 t_beta:        0.2
 
 #--------------env settings-----------------
+need_to_scale: true
 trading_step: 1500
 window_step:  20
 commission: -0.0002
 exclude_cols:
-    # - "target"
-    # - "target_min"
-    # - "target_max" 
-    - "midprice_vwap_v220000.0"
-    - "vwap_midprice_diff_v220000.0"
-    - "midprice_vwap_v130000.0"
-    - "vwap_midprice_diff_v130000.0"
-    - "log_vwap_midprice_ratio_v220000.0"
-    - "nlrr_ws100"
-    - "nlrr_ws500" 
-    - "nlrr_ws2500" 
-    - "mean_trend_ws100_midprice"
-    - "std_trend_ws100_midprice"
-    - "vol_ws100_midprice"
-    - "mean_trend_ws500_midprice"
-    - "std_trend_ws500_midprice"
-    - "vol_ws500_midprice"
-    - "mean_trend_ws100_midprice_vwap_v130000.0"
-    - "std_trend_ws100_midprice_vwap_v130000.0"
-    - "vol_ws100_midprice_vwap_v130000.0"
-    - "mean_trend_ws500_midprice_vwap_v130000.0"
-    - "std_trend_ws500_midprice_vwap_v130000.0"
-    - "vol_ws500_midprice_vwap_v130000.0"
-    - "mean_trend_ws100_midprice_vwap_v220000.0"
-    - "std_trend_ws100_midprice_vwap_v220000.0"
-    - "vol_ws100_midprice_vwap_v220000.0"
-    - "mean_trend_ws500_midprice_vwap_v220000.0"
-    - "std_trend_ws500_midprice_vwap_v220000.0"
-    - "vol_ws500_midprice_vwap_v220000.0"
-    - "new_trend_value_ws100_midprice"
-    - "new_trend_value_ws100_midprice_vwap_v130000.0"
-    - "new_trend_value_ws100_midprice_vwap_v220000.0"
-    - "new_trend_value_ws500_midprice"
-    - "new_trend_value_ws500_midprice_vwap_v130000.0"
-    - "new_trend_value_ws500_midprice_vwap_v220000.0"
-    - "mean_trend_ws2500_midprice_vwap_v130000.0"
-    - "mean_trend_ws2500_midprice_vwap_v220000.0"
-    - "std_trend_ws2500_midprice_vwap_v220000.0"
-    - "vol_ws2500_midprice_vwap_v220000.0"
+    - "mu"
+    - "theta"
 
 
 

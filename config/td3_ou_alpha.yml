@@ -1,0 +1,66 @@
+#--------------general settings-----------------
+path_df:              /home/ugrek/Maquette/data/TEST_features.csv
+eval_save_path_pref:  /media/ugrek/Backup/rl-finance/td3_ou_alpha
+train_start_idx: 5000
+train_end_idx:   905000
+test_start_idx:  910000
+test_end_idx:    920000
+save_every: 10000
+type:            td3
+
+#--------------model settings-----------------
+mode: ou
+mr_out_k:    1.5
+mr_in_k:     3.0
+mr_crit_k:   5.0
+mr_pos_vol:  1.0
+mr_min_pr:   5 # in BPs!
+mr_use_VWAP: true
+
+A_layers: 
+    - 128
+C_layers: 
+    - 128
+
+#--------------training settings-----------------
+#---episodes and replay buffer
+episodes: 10000
+eval_every: 1000
+max_episode_len: 200
+replay_memory_len: 512
+replay_batch: 64
+#---EvE variables
+eps_start:     0.90
+eps_end:       0.05
+eps_decay:     150000
+noise_sigma:   0.05
+noise_mean:    0.0
+#---reward variables
+reg_vol:       40.0
+reg_action:    1e+4
+reg_weights:   1e-2 # not supported
+rew_offset:    5.0
+warm_up_episodes: 100
+reward_decay:  0.2
+#--- Q calculation: Qp + alpha * (R + gamma * Qt' - Qp)
+alpha:         0.9
+gamma:         0.5
+#---learning rate
+lr_A:          1e-4
+lr_C:          1e-1
+lr_decay_A:    0.999
+lr_decay_C:    0.999
+gradient_clip: 1e-3
+#---target update settings
+t_beta:        0.7
+
+#--------------env settings-----------------
+need_to_scale: true
+trading_step: 600
+window_step: 20
+commission: -0.0002
+exclude_cols:
+    - "mu"
+
+
+

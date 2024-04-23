@@ -1,10 +1,14 @@
 # using Pkg
 # Pkg.activate("../alp")
-EPS = 1e-4
+EPS = 1e-8
 
 abstract type RLModel end
+abstract type StatAlgo end
+abstract type Env_p end
 
 @enum ActionType spread OU AS
+
+T = Float32
 
 struct Order
     side_ask::Bool
@@ -85,24 +89,103 @@ thr(eps_start::AbstractFloat,
     eps_decay::Int, 
     steps::Int) = Float32(eps_end) + (eps_start - eps_end) * exp(- T(steps) / eps_decay)
 
-function compose_orders(;
-        sell_delta::AbstractFloat, 
-        sell_qt::AbstractFloat = 1.0,
-        buy_delta::AbstractFloat,
-        buy_qt::AbstractFloat  = 1.0,
-        mid_px::AbstractFloat,
-        assert_both::Bool = true,
-        instr_id::Int8 = Int8(1)
-        )
+
+#------------ General function for stat algorithms -------------------------#
+function compose_order_stat_algo(model::RLModel, algo::StatAlgo, bias...)
     orders = []
-    sell_viable = (sell_delta > EPS)
-    buy_viable = (buy_delta > EPS)
-    # println("Prices $(sell_delta), $(buy_delta), $(sell_viable), $(buy_viable)")
-    assert_both && (!sell_viable || !buy_viable) && return []
-    sell_viable && push!(orders, Order(true, sell_qt, mid_px + sell_delta))
-    buy_viable && push!(orders, Order(false, buy_qt, max(mid_px - buy_delta, EPS)))
+    quotes = quote_(algo, model.env, bias...) 
+
+    # TODO: make qty from config
+    (quotes[1] > EPS) && push!(orders, Order(true,  1.0, quotes[1]))
+    (quotes[2] > EPS) && push!(orders, Order(false, 1.0, quotes[2]))
+
+    (quotes[1] > EPS || quotes[1] > EPS) && print("Quoting $(quotes[1])...$(quotes[2])\n")
+
     return orders
 end
+
+#-----------------------------------------------------------------------------#
+# Compose discrete order variations                                           #
+#-----------------------------------------------------------------------------#
+function compose_orders(model::RLModel, action_idx::Int, mid_px::T)
+    #TODO: replace with type distribution
+    if      model.action_type == spread
+        return compose_orders_spread(model, action_idx, mid_px)
+    else
+        return compose_orders_stat(model, action_idx, mid_px)
+    end
+end
+
+function compose_orders_spread(model::RLModel, action_idx::Int, mid_px::T)
+    orders = []
+    qt1 = model.action_space[action_idx][1]
+    qt2 = model.action_space[action_idx][2]
+    
+
+    ((qt1 < 0.0001) && (qt2 < 0.0001)) && return []
+
+    # TODO: make qty from config
+    push!(orders, Order(true,  1.0, mid_px * (1.0 + qt1)))
+    push!(orders, Order(false, 1.0, mid_px * (1.0 + qt2)))
+    return orders
+end
+
+function compose_orders_stat(model::RLModel, action_idx::Int, mid_px::T)
+    # here it is asserted that action space is of lenght 3
+    ou_bias   = model.action_space[action_idx]
+    return compose_order_stat_algo(model, model.stat_algo, ou_bias...)
+end
+
+#-----------------------------------------------------------------------------#
+# Compose continious order variations                                         #
+#-----------------------------------------------------------------------------#
+function compose_orders(;
+    model::RLModel,
+    actions::Vector{T},
+    mid_px::AbstractFloat,
+    assert_both::Bool = true,
+    instr_id::Int8 = Int8(1)
+)
+    args = [model, actions, mid_px, assert_both, instr_id]
+
+    if      model.action_type == spread
+        return compose_orders_spread(args...)
+    else
+        return compose_order_stat_algo(model, model.stat_algo, actions...)
+    end
+end
+
+function compose_orders_spread(
+    model::RLModel,
+    actions::Vector{T},
+    mid_px::AbstractFloat,
+    assert_both::Bool = true,
+    instr_id::Int8 = Int8(1)
+)
+    orders = []
+    sell_viable = (actions[1] > EPS)
+    buy_viable =  (actions[2] > EPS)
+
+    assert_both && (!sell_viable || !buy_viable) && return []
+    sell_viable && push!(orders, Order(true, 1.0,  mid_px + actions[1]))
+    buy_viable &&  push!(orders, Order(false, 1.0, max(mid_px - actions[2], EPS)))
+
+    return orders
+end
+
+function compose_orders_stat(    
+    model::RLModel,
+    actions::Vector{T},
+    mid_px::AbstractFloat,
+    assert_both::Bool = true,
+    instr_id::Int8 = Int8(1)
+)
+    return compose_order_stat_algo(model, model.stat_algo, actions...)
+end
+
+#--------------------------------------------#
+# Other structs                              #
+#--------------------------------------------#
 
 struct Test
     PnL::AbstractFloat
@@ -132,4 +215,14 @@ end
 mutable struct Run
     experiments::Vector{Experiment}
     config::Dict
+end
+
+function train!(
+    c::Dict,
+    model::RLModel, 
+    train_env::Env_p,
+    test_env:: Union{Env_p,Nothing},
+    save_path::String
+)
+    throw(error("Train sequence not introduced for required model $(typeof(model))"))
 end

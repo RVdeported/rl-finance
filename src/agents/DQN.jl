@@ -11,15 +11,13 @@ using Base
 # include("../tools/Env.jl")
 # include("../tools/BaseTypes.jl")
 
-T = Float32
 mutable struct DQN <: RLModel
     target_model ::Ref{Chain}
     predict_model::Ref{Chain}
     action_space ::Vector{Any} # buy and sell offset
     stats        ::Dict{String, Vector}
     action_type  ::ActionType
-    mm_ou        ::Union{Nothing, MRbase}    
-    mm_as        ::Union{Nothing, ASbase}    
+    stat_algo    ::Union{Nothing, StatAlgo}    
     env          ::Union{Nothing, Env}       
 end
 
@@ -31,14 +29,13 @@ function init!(;
     action_space::Vector{Any},
     activation::Function = relu,
     action_type::ActionType = spread,
-    mm_ou::Union{Nothing, MRbase} = nothing,
-    mm_as::Union{Nothing, ASbase} = nothing
+    stat_algo::Union{Nothing, StatAlgo} = nothing,
 )
     model = make_chain(layers, in_feats, out_feats, activation)
     
     @assert(action_type == spread || !isnothing(MRbase))
-    @assert(action_type != OU     || (length(action_space[1]) == 3 && !isnothing(mm_ou)))
-    @assert(action_type != AS     || (length(action_space[1]) == 3 && !isnothing(mm_as)))
+    @assert(action_type != OU     || (length(action_space[1]) == 3 && stat_algo isa MRbase))
+    @assert(action_type != AS     || (length(action_space[1]) == 3 && stat_algo isa ASbase))
     @assert(action_type != spread || length(action_space[1]) == 2)
 
     dqn = DQN(
@@ -54,8 +51,7 @@ function init!(;
             "lr" => []
         ),
         action_type,
-        mm_ou,
-        mm_as,
+        stat_algo,
         nothing
     )
     return dqn
@@ -66,68 +62,6 @@ function move(dqn::DQN, target_gpu::Bool, predict_gpu::Bool)
     dqn.target_model[] = fmap(target_gpu ? cu : cpu,  dqn.target_model[])
 end
 
-#-----------------------------------------------------------------------------#
-# Compose order variations                                                    #
-#-----------------------------------------------------------------------------#
-function compose_orders(dqn::DQN, action_idx::Int, mid_px::T)
-    #TODO: replace with type distribution
-    if      dqn.action_type == spread
-        return compose_orders_spread(dqn, action_idx, mid_px)
-    elseif  dqn.action_type == OU
-        return compose_orders_ou(    dqn, action_idx, mid_px)
-    elseif  dqn.action_type == AS
-        return compose_orders_as(    dqn, action_idx, mid_px)
-    end
-    @assert(false)
-end
-
-function compose_orders_spread(dqn::DQN, action_idx::Int, mid_px::T)
-    orders = []
-    qt1 = dqn.action_space[action_idx][1]
-    qt2 = dqn.action_space[action_idx][2]
-    
-
-    ((qt1 < 0.0001) && (qt2 < 0.0001)) && return []
-
-    # TODO: make qty from config
-    push!(orders, Order(true,  1.0, mid_px * (1.0 + qt1)))
-    push!(orders, Order(false, 1.0, mid_px * (1.0 + qt2)))
-    return orders
-end
-
-function compose_orders_ou(dqn::DQN, action_idx::Int, mid_px::T)
-    orders = []
-
-    # here it is asserted that action space is of lenght 3
-    ou_bias   = dqn.action_space[action_idx]
-    quotes = quote_ou(dqn.mm_ou, dqn.env, ou_bias...) 
-
-    ((quotes[1] < 0.0001) && (quotes[2] < 0.0001)) && return []
-
-    print("Quoting at $(quotes[1])...$(quotes[2]), action $ou_bias\n")
-
-    # TODO: make qty from config
-    push!(orders, Order(true,  1.0, quotes[1]))
-    push!(orders, Order(false, 1.0, quotes[2]))
-    return orders
-end
-
-function compose_orders_as(dqn::DQN, action_idx::Int, mid_px::T)
-    orders = []
-
-    # here it is asserted that action space is of lenght 3
-    as_bias   = dqn.action_space[action_idx]
-    quotes = quote_as(dqn.mm_as, dqn.env, as_bias...) 
-
-    ((quotes[1] < 0.0001) && (quotes[2] < 0.0001)) && return []
-
-    # print("Quoting at $(quotes[1])...$(quotes[2]), action $as_bias\n")
-
-    # TODO: make qty from config
-    (quotes[1] > 0.0) && push!(orders, Order(true,  1.0, quotes[1]))
-    (quotes[2] > 0.0) && push!(orders, Order(false, 1.0, quotes[2]))
-    return orders
-end
 
 
 function train_dqn(

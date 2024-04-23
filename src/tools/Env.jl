@@ -13,7 +13,7 @@ SCALER_TYPE = UnitRangeTransform
 #================================================================#
 # structure for holding essencial env data.
 # Only float columns considered to be features
-mutable struct Env
+mutable struct Env <: Env_p
     data::DataFrame          # dataset holder
     last_point::Ref{Int}     # last index of interest
     w_size::Int              # window of predictions
@@ -74,22 +74,6 @@ function init_env!(
         
     df[!, "midprice"] = 0.5 .* (df[!, ask_col] + df[!, bid_col])
 
-    #-----------------------------------#
-    # clear non-required instrs         #
-    #-----------------------------------#
-    # for name in names_
-    #     if name == "ts"
-    #         continue
-    #     end
-    #     print(findfirst("_o_", name)[1] - 1)
-    #     instr_df = name[1:findfirst("_o_", name)[1] - 1]
-    #     # print(instr)
-    #     if instr != instr_df
-    #         print("Removing " * name * "\n")
-    #         select!(df, Not(name))
-    #     end
-    # end
-
     # we need to look through all columns and distribute them among 
     # real features, date features and non-real values
     for (i, n) in enumerate(eltype.(eachcol(df))) 
@@ -120,6 +104,14 @@ function init_env!(
 
     start_idx_ = (start_idx > 0) ? start_idx : 1
     end_idx_   = (end_idx > 0) ? end_idx : nrow(df)
+
+    #------------------------------------#
+    # Replace NaNs                       #
+    #------------------------------------#
+    for name in names(scaled)
+        replace!(scaled[:, name], NaN => -1.0)
+    end
+
     env = Env(scaled, start_idx_, w_size, real_feats, feats_for_scale, feats_for_model, 
             date_feats, commission, lat_ms, [], scaler,
             start_idx_, end_idx_, instr, ask_col, bid_col)

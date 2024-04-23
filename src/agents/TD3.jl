@@ -20,13 +20,18 @@ mutable struct TD3 <: RLModel
     An_model::Chain
     action_space::Int # number of outputs of type T
     stats::Dict{String, Vector}
+    action_type  ::ActionType
+    stat_algo    ::Union{Nothing, StatAlgo}    
+    env          ::Union{Nothing, Env}   
 end
 
 function init_td3!(;
     in_feats::Int64,
     A_layers::Vector{Int64},
     C_layers::Vector{Int64},
-    action_space::Int = 2
+    action_space::Int = 2,    
+    action_type::ActionType = spread,
+    stat_algo::Union{Nothing, StatAlgo} = nothing,
 )
     A = make_chain(A_layers, in_feats, action_space, Flux.relu)
     C1 = make_chain(C_layers, in_feats + action_space, 1, Flux.relu)
@@ -51,8 +56,14 @@ function init_td3!(;
             "lr" => [],
             "C_labels" => [],
             "a_norm" => []
-        )
+        ),
+        action_type,
+        stat_algo,
+        nothing
     )
+    @assert(action_type != OU     || (action_space == 3 && stat_algo isa MRbase))
+    @assert(action_type != AS     || (action_space == 3 && stat_algo isa ASbase))
+    @assert(action_type != spread || action_space == 2)
     return td3
 end
 
@@ -108,6 +119,8 @@ function train_td3(
     save_path_pref::String = "./model",
     reg_weights::T = T(1e-4)
 )
+    td3.env = env
+
     replay_memory = Tuple{Int, Int, Vector{T}, T, Vector{T}, Vector{T}, T}[]
     add_rm(x) = (length(replay_memory) >= replay_memory_len) ? (popfirst!(replay_memory); push!(replay_memory, x)) : push!(replay_memory, x)
     eval_res = []
@@ -147,11 +160,12 @@ function train_td3(
             state_idx = env.last_point[]
             state_dr = get_state(env, true)
             state_orig = get_state(env, false)
+
             mid_px = state_orig.midprice
             state = cu(T[state_dr...])
             
             if ep_idx < warm_up_episodes
-                actions = rand(2) .* 0.5
+                actions = rand(td3.action_space) .* 0.5
             else
                 actions = cpu(td3.An_model(state))
             end
@@ -163,17 +177,18 @@ function train_td3(
             global_step += 1
 
             orders = compose_orders(
-                sell_delta = abs(actions[1]), 
-                buy_delta  = abs(actions[2]), 
-                mid_px = mid_px)
+                model   = td3,
+                actions = T[actions...],
+                mid_px  = mid_px
+            )
 
             for n in orders
                 input_order(env, n)
             end
             
             ex_res = execute!(env, step_, pred_idx == max_ep_len)
-            # reward = ex_res.reward
-            reward = (ex_res.orders_done == 2) ? 100 : (ex_res.orders_done == 1) ? -20 : 0
+            reward = ex_res.reward
+            # reward = (ex_res.orders_done == 2) ? 100 : (ex_res.orders_done == 1) ? -20 : 0
             push!(reward_arr, reward)
             step(env, step_)
 
@@ -226,7 +241,7 @@ function train_td3(
         
         if (ep_idx % eval_every == 0) && !(isnothing(eval_env))
             move(td3, true, false)
-            res = simulate!(eval_env, order_action=order_action_td3, step_=step_, kwargs=td3)
+            res = simulate!(eval_env, order_action=order_action, step_=step_, kwargs=td3)
             push!(eval_res, res)
             move(td3, false, false)
         end
@@ -360,7 +375,7 @@ function optimize(
     return Dict("A_loss" => A_val, "C_loss" => C_val, "labels" => mean(cpu(C_labels)))
 end
 
-function order_action_td3(
+function order_action(
     env::Env,
     td3::TD3
 )
@@ -369,12 +384,57 @@ function order_action_td3(
     mid_px = state.midprice
     scaled_state = cu([scaled_state...])
     action_idx = cpu(td3.A_model(scaled_state))
-    orders = compose_orders(sell_delta = abs(action_idx[1]), 
-                            buy_delta = abs(action_idx[2]), 
-                            mid_px = mid_px)
+    orders = compose_orders(
+        model   = td3,
+        actions = action_idx,
+        mid_px = mid_px
+    )
     for n in orders
         # display(n)
         input_order(env, n)
     end
     
+end
+
+function train!(
+    c::Dict,
+    td3::TD3, 
+    train_env::Env,
+    test_env:: Union{Env,Nothing},
+    save_path::String
+)
+    eval_res = train_td3(
+        td3,
+        train_env;
+        episodes=c["episodes"],
+        max_ep_len=c["max_episode_len"],
+        step_=c["window_step"],
+        replay_memory_len=c["replay_memory_len"],
+        replay_batch=c["replay_batch"],     
+        warm_up_episodes = c["warm_up_episodes"],
+        alpha = T(c["alpha"]),
+        gamma = T(c["gamma"]),
+        eval_every = c["eval_every"],
+        eval_env = test_env,
+        gradient_clip = c["gradient_clip"],
+        eps_start = c["eps_start"],
+        eps_end   = c["eps_end"],
+        eps_decay = c["eps_decay"],
+        rew_decay = c["reward_decay"],
+        lr_A      = c["lr_A"],
+        lr_C      = c["lr_C"],
+        lr_decay_A= c["lr_decay_A"],
+        lr_decay_C= c["lr_decay_C"],
+        reg_vol   = T(c["reg_vol"]),
+        reg_action= T(c["reg_action"]),
+        rew_offset= T(c["rew_offset"]),
+        noise_sigma = c["noise_sigma"],
+        noise_mean = c["noise_mean"],
+        t_beta = c["t_beta"],
+        save_every = c["save_every"],
+        save_path_pref = save_path,
+        reg_weights = T(c["reg_weights"])
+    )
+
+    return eval_res
 end

@@ -1,0 +1,90 @@
+#--------------general settings-----------------
+path_df: ../data/ETHUSD_VTE_ba_16:28-11.csv
+train_start_idx: 288001
+train_end_idx: 300001
+test_start_idx: 300001
+test_end_idx: 301001
+save_every: 100
+
+#--------------model settings-----------------
+actions:
+    - 0.1
+    - 1.0
+layers: 
+    - 64
+    - 8
+
+#--------------training settings-----------------
+#---episodes and replay buffer
+episodes: 561
+max_episode_len: 2
+replay_memory_len: 128
+replay_batch: 64
+eval_every: 100
+#---EvE variables
+eps_start:     0.90
+eps_end:       0.05
+eps_decay:     500000
+#---reward variables
+reward_decay:  0.3
+reg_vol:       50.0
+warm_up_episodes: 100
+#--- Q calculation: Qp + alpha * (R + gamma * Qt' - Qp)
+alpha:         0.9
+gamma:         0.5
+#---learning rate
+lr:            1e-4
+lr_decay:      0.99
+gradient_clip: 1e-1
+#---target update settings
+merge_dqns_every: 10  # not important if merge_soft == True
+merge_soft: true
+merge_alpha: 0.3
+
+#--------------env settings-----------------
+commission: -0.0002    
+trading_step: 200      # how far we predict
+window_step: 10
+exclude_cols:
+    - "target"
+    - "target_min"
+    - "target_max" 
+    # - "midprice_vwap_v220000.0"
+    - "vwap_midprice_diff_v220000.0"
+    - "midprice_vwap_v130000.0"
+    - "vwap_midprice_diff_v130000.0"
+    - "log_vwap_midprice_ratio_v220000.0"
+    - "nlrr_ws100"
+    - "nlrr_ws500" 
+    - "nlrr_ws2500" 
+    # - "mean_trend_ws100_midprice"
+    # - "std_trend_ws100_midprice"
+    # - "vol_ws100_midprice"
+    - "mean_trend_ws500_midprice"
+    - "std_trend_ws500_midprice"
+    - "vol_ws500_midprice"
+    - "mean_trend_ws100_midprice_vwap_v130000.0"
+    - "std_trend_ws100_midprice_vwap_v130000.0"
+    - "vol_ws100_midprice_vwap_v130000.0"
+    - "mean_trend_ws500_midprice_vwap_v130000.0"
+    - "std_trend_ws500_midprice_vwap_v130000.0"
+    - "vol_ws500_midprice_vwap_v130000.0"
+    - "mean_trend_ws100_midprice_vwap_v220000.0"
+    - "std_trend_ws100_midprice_vwap_v220000.0"
+    - "vol_ws100_midprice_vwap_v220000.0"
+    - "mean_trend_ws500_midprice_vwap_v220000.0"
+    - "std_trend_ws500_midprice_vwap_v220000.0"
+    - "vol_ws500_midprice_vwap_v220000.0"
+    - "new_trend_value_ws100_midprice"
+    - "new_trend_value_ws100_midprice_vwap_v130000.0"
+    - "new_trend_value_ws100_midprice_vwap_v220000.0"
+    - "new_trend_value_ws500_midprice"
+    - "new_trend_value_ws500_midprice_vwap_v130000.0"
+    - "new_trend_value_ws500_midprice_vwap_v220000.0"
+    - "mean_trend_ws2500_midprice_vwap_v130000.0"
+    - "mean_trend_ws2500_midprice_vwap_v220000.0"
+    - "std_trend_ws2500_midprice_vwap_v220000.0"
+    - "vol_ws2500_midprice_vwap_v220000.0"
+
+
+

@@ -1,0 +1,61 @@
+#--------------general settings-----------------
+path_df: /home/ugrek/Maquette/data/TEST_features.csv
+train_start_idx: 200000
+train_end_idx:   4000000
+test_start_idx:  5000
+test_end_idx:    100000
+
+#--------------model settings-----------------
+mode: as
+as_alpha: 0.4
+as_k:     1.5
+as_gamma: 5.0
+
+A_layers: 
+    - 256
+    - 16
+C_layers: 
+    - 512
+    - 16
+
+#--------------training settings-----------------
+#---episodes and replay buffer
+episodes: 4000
+eval_every: 100
+max_episode_len: 100
+replay_memory_len: 2048
+replay_batch: 64
+#---EvE variables
+eps_start:     0.90
+eps_end:       0.05
+eps_decay:     7000
+noise_sigma:   0.1
+noise_mean:    0.0
+#---reward variables
+reg_vol:       50.0
+reg_action:    1e-2
+rew_offset:    5.0
+warm_up_episodes: 50
+reward_decay:  0.2
+#--- Q calculation: Qp + alpha * (R + gamma * Qt' - Qp)
+alpha:         0.3
+gamma:         0.5
+#---learning rate
+lr_A:          1e-1
+lr_C:          1e-3
+lr_decay_A:    0.995
+lr_decay_C:    0.993
+gradient_clip: 1e-1
+#---target update settings
+t_beta:        0.2
+
+#--------------env settings-----------------
+need_to_scale: true
+trading_step: 1500
+window_step:  20
+commission: -0.0002
+exclude_cols:
+    - "mu"
+
+
+

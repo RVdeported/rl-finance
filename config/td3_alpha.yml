@@ -1,5 +1,5 @@
 #--------------general settings-----------------
-path_df: ../data/ETHUSD_VTE_ba_16:28-11.csv
+path_df: /home/ugrek/Maquette/data/TEST_features.csv
 train_start_idx: 1
 train_end_idx: 905000
 test_start_idx: 910000
@@ -7,6 +7,8 @@ test_end_idx: end
 save_every: 1000
 
 #--------------model settings-----------------
+mode: spread
+
 A_layers: 
     - 128
 C_layers: 
@@ -45,6 +47,7 @@ gradient_clip: 1e-1
 t_beta:        0.1
 
 #--------------env settings-----------------
+need_to_scale: true
 trading_step: 200
 window_step: 20
 commission: -0.0002
