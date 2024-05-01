@@ -23,14 +23,13 @@ end
 
 function quote_(
     as::ASbase, 
-    env::Env, 
+    state::DataFrameRow,
     alpha_bias::AbstractFloat = 0.0,
     k_bias    ::AbstractFloat = 0.0,
     gamma_bias::AbstractFloat = 0.0,    
 )
     res::Vector{AbstractFloat} = [-1.0, -1.0]
 
-    state  = get_state(env)
     mid_px = state.midprice
     sigma  = state.sigma
     sigma_sqr = sigma * sigma
@@ -80,7 +79,7 @@ function order_action(
     env::Env,
     as::ASbase
 )
-    quotes = quote_(as, env)
+    quotes = quote_(as, get_state(env))
 
     (quotes[1] > 0.0) && input_order(env, Order(true, 1.0, quotes[1]))
     (quotes[2] > 0.0) && input_order(env, Order(false, 1.0, quotes[2]))

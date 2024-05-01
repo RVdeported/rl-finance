@@ -19,7 +19,6 @@ mutable struct DDPG <: RLModel
     stats::Dict{String, Vector}
     action_type  ::ActionType
     stat_algo    ::Union{Nothing, StatAlgo}    
-    env          ::Union{Nothing, Env}       
 end
 
 function init_ddpg!(;
@@ -44,7 +43,6 @@ function init_ddpg!(;
             "loss" => [],
             "A_loss" => [],
             "reward" => [],
-            "no_actions" => [],
             "vol_left" => [],
             "noise" => [],
             "lr" => [],
@@ -53,7 +51,6 @@ function init_ddpg!(;
         ),
         action_type,
         stat_algo,
-        nothing
     )
 
     @assert(action_type != OU     || (action_space == 3 && stat_algo isa MRbase))
@@ -78,6 +75,9 @@ function move(ddpg::DDPG,
 end
 
 
+function move_pr(ddpg::DDPG, gpu::Bool)
+    move(ddpg, gpu, false, false, false, false)
+end
 
 function train_ddpg(
     ddpg::DDPG,
@@ -91,7 +91,7 @@ function train_ddpg(
     alpha::T = 0.6,
     gamma::T = 0.7,
     eval_every::Int = 100,
-    eval_env::Env = nothing,
+    eval_env::Union{Env, Nothing} = nothing,
     gradient_clip::AbstractFloat = 1e-3,
     eps_start::AbstractFloat = 0.05,
     eps_end::AbstractFloat   = 0.90,
@@ -106,9 +106,14 @@ function train_ddpg(
     lr_C::AbstractFloat = 1e-5,
     lr_decay_A::AbstractFloat = 0.95,
     lr_decay_C::AbstractFloat = 0.95,
-    t_beta::AbstractFloat = 0.1
+    t_beta::AbstractFloat = 0.1,
+    save_path_pref::String = "./model/",
+    save_every::Int    = 1000,
+    wandb_lg::Union{WandbLogger, Nothing} = nothing,
+    wandb_pref::String = ""
 )
-    ddpg.env = env
+    mkpath(save_path_pref)
+
     replay_memory = Tuple{Int, Int, Vector{T}, T, Vector{T}, Vector{T}, T}[]
     add_rm(x) = (length(replay_memory) >= replay_memory_len) ? (popfirst!(replay_memory); push!(replay_memory, x)) : push!(replay_memory, x)
     eval_res = []
@@ -159,6 +164,7 @@ function train_ddpg(
             orders = compose_orders(
                 model   = ddpg,
                 actions = actions,
+                state   = state_orig,
                 mid_px  = mid_px)
 
             for n in orders
@@ -213,7 +219,8 @@ function train_ddpg(
         push!(ddpg.stats["noise"], noise)
         push!(ddpg.stats["lr"], A_optim[2].eta)
         push!(ddpg.stats["a_norm"], a_norm / max_ep_len)
-        
+        !(wandb_lg isa Nothing) && wandb_log_dict(
+            wandb_lg, ddpg.stats, wandb_pref)
         if (ep_idx % eval_every == 0) && !(isnothing(eval_env))
             move(ddpg, true, false)
             res = simulate!(eval_env, order_action=order_action, step_=step_, kwargs=ddpg)
@@ -223,6 +230,11 @@ function train_ddpg(
 
         if done(env)
             env.last_point[] = rand(1:30)
+        end
+
+        if (save_every > 0 && ep_idx % save_every == 0)
+            res = Dict("model" => ddpg, "eval" => eval_res)
+            @save "$(save_path_pref)_$ep_idx.jld2" res
         end
     end
     return eval_res
@@ -328,10 +340,57 @@ function order_action(
     orders = compose_orders(
         model = ddpg,
         actions = action_idx, 
+        state   = state,
         mid_px = mid_px)
     for n in orders
         # display(n)
         input_order(env, n)
     end
     
+end
+
+
+function train!(
+    c::Dict,
+    ddpg::DDPG, 
+    train_env::Env,
+    test_env:: Union{Env,Nothing},
+    save_path::String,
+    wandb_lg::Union{WandbLogger, Nothing} = nothing
+)
+    eval_res = train_ddpg(
+        ddpg,
+        train_env;
+        episodes=c["episodes"],
+        max_ep_len=c["max_episode_len"],
+        step_=c["window_step"],
+        replay_memory_len=c["replay_memory_len"],
+        replay_batch=c["replay_batch"],     
+        warm_up_episodes = c["warm_up_episodes"],
+        alpha = T(c["alpha"]),
+        gamma = T(c["gamma"]),
+        eval_every = c["eval_every"],
+        eval_env = test_env,
+        gradient_clip = c["gradient_clip"],
+        eps_start = c["eps_start"],
+        eps_end   = c["eps_end"],
+        eps_decay = c["eps_decay"],
+        rew_decay = c["reward_decay"],
+        lr_A      = c["lr_A"],
+        lr_C      = c["lr_C"],
+        lr_decay_A= c["lr_decay_A"],
+        lr_decay_C= c["lr_decay_C"],
+        reg_vol   = T(c["reg_vol"]),
+        reg_action= T(c["reg_action"]),
+        rew_offset= T(c["rew_offset"]),
+        noise_sigma = c["noise_sigma"],
+        noise_mean = c["noise_mean"],
+        t_beta = c["t_beta"],
+        save_path_pref = save_path,
+        save_every = c["save_every"],
+        wandb_lg    = wandb_lg,
+        wandb_pref  = get_wandb_pref(c["eval_save_path_pref"])
+    )
+
+    return eval_res
 end

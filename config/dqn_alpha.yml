@@ -1,10 +1,11 @@
 #--------------general settings-----------------
 path_df: /home/ugrek/Maquette/data/TEST_features.csv
-train_start_idx: 10000
-train_end_idx:   3000000
-test_start_idx:  5000
-test_end_idx:    100000
-save_every:      10000
+eval_save_path_pref:  /media/ugrek/Backup/rl-finance/dqn_alpha/
+train_start_idx: 5000
+train_end_idx:   4500000
+test_start_idx:  4600000
+test_end_idx:    4700000
+save_every:      2000
 type:            dqn
 
 #--------------model settings-----------------
@@ -15,81 +16,46 @@ actions:
     - 30
     - 200
 layers: 
+    - 1024
     - 256
-    - 32
+    - 128
+
 
 #--------------training settings-----------------
 #---episodes and replay buffer
-episodes: 20000
-max_episode_len: 100
-replay_memory_len: 512
-replay_batch: 64
-eval_every: 100000
+episodes:          2000
+eval_every:        4000
+max_episode_len:   100
+replay_memory_len: 1024
+replay_batch:      64
 #---EvE variables
-eps_start:     0.90
-eps_end:       0.05
-eps_decay:     500000
+eps_start:         0.90
+eps_end:           0.05
+eps_decay:         500000
 #---reward variables
-reward_decay:  0.3
-reg_vol:       5.0
+reward_decay:      0.3
+reg_vol:           5.0
 warm_up_episodes: 1000
 #--- Q calculation: Qp + alpha * (R + gamma * Qt' - Qp)
-alpha:         0.9
-gamma:         0.5
+alpha:         0.5
+gamma:         0.7
 #---learning rate
-lr:            1e-4
+lr:            1e-5
 lr_decay:      0.9999
-gradient_clip: 1e-2
+gradient_clip: 1e-7
 #---target update settings
 merge_dqns_every: 10  # not important if merge_soft == True
-merge_soft: true
-merge_alpha: 0.3
+merge_soft:       true
+merge_alpha:      0.6
 
 #--------------env settings-----------------
-commission: -0.0002    
-trading_step: 9000      # how far we predict
-window_step: 5
-need_scale: false
+need_to_scale:       true
+trading_step:     300      # how far we predict
+window_step:      299
+commission:      -0.0002    
 exclude_cols:
-    - "target"
-    - "target_min"
-    - "target_max" 
-    # - "midprice_vwap_v220000.0"
-    - "vwap_midprice_diff_v220000.0"
-    - "midprice_vwap_v130000.0"
-    - "vwap_midprice_diff_v130000.0"
-    - "log_vwap_midprice_ratio_v220000.0"
-    - "nlrr_ws100"
-    - "nlrr_ws500" 
-    - "nlrr_ws2500" 
-    # - "mean_trend_ws100_midprice"
-    # - "std_trend_ws100_midprice"
-    # - "vol_ws100_midprice"
-    - "mean_trend_ws500_midprice"
-    - "std_trend_ws500_midprice"
-    - "vol_ws500_midprice"
-    - "mean_trend_ws100_midprice_vwap_v130000.0"
-    - "std_trend_ws100_midprice_vwap_v130000.0"
-    - "vol_ws100_midprice_vwap_v130000.0"
-    - "mean_trend_ws500_midprice_vwap_v130000.0"
-    - "std_trend_ws500_midprice_vwap_v130000.0"
-    - "vol_ws500_midprice_vwap_v130000.0"
-    - "mean_trend_ws100_midprice_vwap_v220000.0"
-    - "std_trend_ws100_midprice_vwap_v220000.0"
-    - "vol_ws100_midprice_vwap_v220000.0"
-    - "mean_trend_ws500_midprice_vwap_v220000.0"
-    - "std_trend_ws500_midprice_vwap_v220000.0"
-    - "vol_ws500_midprice_vwap_v220000.0"
-    - "new_trend_value_ws100_midprice"
-    - "new_trend_value_ws100_midprice_vwap_v130000.0"
-    - "new_trend_value_ws100_midprice_vwap_v220000.0"
-    - "new_trend_value_ws500_midprice"
-    - "new_trend_value_ws500_midprice_vwap_v130000.0"
-    - "new_trend_value_ws500_midprice_vwap_v220000.0"
-    - "mean_trend_ws2500_midprice_vwap_v130000.0"
-    - "mean_trend_ws2500_midprice_vwap_v220000.0"
-    - "std_trend_ws2500_midprice_vwap_v220000.0"
-    - "vol_ws2500_midprice_vwap_v220000.0"
+    - "mu"
+    - "theta"
 
 
 

@@ -8,3 +8,6 @@ test*
 *.png
 __*
 base/
+wandb/
+experiments/
+.CondaPkg/

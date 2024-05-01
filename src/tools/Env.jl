@@ -303,10 +303,10 @@ end
 #---------------------------------------------------------#
 # Function need some Function which accepts Env, state and additional arguments
 # and expects it to fill the env with orders for evaluation.
-struct sim_result
+mutable struct sim_result
     reward::Vector{AbstractFloat}
     executed_orders::Vector{Int}
-    PnL::Ref{AbstractFloat}
+    PnL::AbstractFloat
 end
 
 function simulate!(
@@ -332,9 +332,54 @@ function simulate!(
         step(env, step_)
         iter += 1
     end
-    res_sim.PnL[] = sum(res_sim.reward)
+    res_sim.PnL = sum(res_sim.reward)
 
     return res_sim
+end
+
+function simulate_live!(
+    env::Env,
+    model::RLModel,
+    config::Dict,
+    wandb_lg::Union{WandbLogger, Nothing} = nothing,
+)
+    config["eps_start"] = 0.0
+    config["eps_end"] = 0.0
+    prev_stat_len = length(model.stats["reward"])
+    config["episodes"] = Int(round(
+        (env.end_idx - env.start_idx) / config["window_step"] / config["max_episode_len"]
+        , RoundDown
+    )) 
+    config["warm_up_episodes"] = 0
+
+    _ = train!(
+        config, 
+        model,
+        env, nothing,
+        config["eval_save_path_pref"], 
+        wandb_lg
+    )
+    reward = model.stats["reward"][prev_stat_len:end]
+    pnl    = sum(reward)
+
+    return sim_result(reward, [], pnl)
+end
+
+function simulate_live!(
+    env::Env,
+    model::StatAlgo,
+    config::Dict,
+    wandb_lg::Union{WandbLogger, Nothing} = nothing
+)
+    return simulate!(
+        env, 
+        order_action = order_action, 
+        step_ = config["window_step"], 
+        kwargs = model,
+        clear_env_at_step = false,
+        clear_every = 500000000,
+        reailize_gain_on_step = false
+    )
 end
 
 struct order_exec_stats

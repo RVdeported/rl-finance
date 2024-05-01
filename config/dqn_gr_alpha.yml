@@ -1,0 +1,67 @@
+#--------------general settings-----------------
+path_df:              /home/ugrek/Maquette/data/TEST_features.csv
+eval_save_path_pref:  /media/ugrek/Backup/rl-finance/dqn_gr_alpha/
+train_start_idx: 5000
+train_end_idx:   4500000
+test_start_idx:  3000000
+test_end_idx:    4000000
+save_every:      1000
+type:            dqn
+
+#--------------model settings-----------------
+# modes: spread, ou, as, grid
+mode:     grid
+gr_delta:       0.005
+gr_target_pr:   0.005
+gr_max_qt:      13.0
+# will be diveded by 10!
+gr_pred_px_deltas:
+    -  0.0
+    -  0.1
+    - -0.1
+gr_deltas:
+    -  0.0
+gr_target_prs:
+    -  0.0
+layers: 
+    - 1024
+    - 256
+    - 128
+
+#--------------training settings-----------------
+#---episodes and replay buffer
+episodes:          2000
+eval_every:        4000
+replay_memory_len: 2048
+max_episode_len:   1000
+replay_batch:      128
+#---EvE variables
+eps_start:          0.90
+eps_end:            0.05
+eps_decay:          500000
+#---reward variables
+reward_decay:       0.3
+reg_vol:            0.0
+warm_up_episodes:   1000
+#--- Q calculation: Qp + alpha * (R + gamma * Qt' - Qp)
+alpha:         0.7
+gamma:         0.5
+#---learning rate
+lr:            1e-6
+lr_decay:      0.9999
+gradient_clip: 1e-6
+#---target update settings
+merge_dqns_every: 10  # not important if merge_soft == True
+merge_soft: true
+merge_alpha: 0.5
+
+#--------------env settings-----------------
+need_to_scale: true
+trading_step:  600
+window_step:   599
+commission:   -0.0002    
+exclude_cols:
+    - "mu"
+    - "theta"
+
+

@@ -22,7 +22,6 @@ mutable struct TD3 <: RLModel
     stats::Dict{String, Vector}
     action_type  ::ActionType
     stat_algo    ::Union{Nothing, StatAlgo}    
-    env          ::Union{Nothing, Env}   
 end
 
 function init_td3!(;
@@ -50,7 +49,6 @@ function init_td3!(;
             "loss" => [],
             "A_loss" => [],
             "reward" => [],
-            "no_actions" => [],
             "vol_left" => [],
             "noise" => [],
             "lr" => [],
@@ -59,7 +57,6 @@ function init_td3!(;
         ),
         action_type,
         stat_algo,
-        nothing
     )
     @assert(action_type != OU     || (action_space == 3 && stat_algo isa MRbase))
     @assert(action_type != AS     || (action_space == 3 && stat_algo isa ASbase))
@@ -86,6 +83,10 @@ function move(td3::TD3,
 end
 
 
+function move_pr(td3::TD3, gpu::Bool)
+    move(td3, gpu, false, false, false, false, false, false)
+end
+
 
 function train_td3(
     td3::TD3,
@@ -99,7 +100,7 @@ function train_td3(
     alpha::T = 0.6,
     gamma::T = 0.7,
     eval_every::Int = 100,
-    eval_env::Env = nothing,
+    eval_env::Union{Env, Nothing} = nothing,
     gradient_clip::AbstractFloat = 1e-3,
     eps_start::AbstractFloat = 0.05,
     eps_end::AbstractFloat   = 0.90,
@@ -117,9 +118,11 @@ function train_td3(
     t_beta::AbstractFloat = 0.1,
     save_every::Int = -1,
     save_path_pref::String = "./model",
-    reg_weights::T = T(1e-4)
+    reg_weights::T = T(1e-4),
+    wandb_lg::Union{WandbLogger, Nothing} = nothing,
+    wandb_pref::String = ""
 )
-    td3.env = env
+    mkpath(save_path_pref)
 
     replay_memory = Tuple{Int, Int, Vector{T}, T, Vector{T}, Vector{T}, T}[]
     add_rm(x) = (length(replay_memory) >= replay_memory_len) ? (popfirst!(replay_memory); push!(replay_memory, x)) : push!(replay_memory, x)
@@ -179,6 +182,7 @@ function train_td3(
             orders = compose_orders(
                 model   = td3,
                 actions = T[actions...],
+                state   = state_orig,
                 mid_px  = mid_px
             )
 
@@ -238,7 +242,9 @@ function train_td3(
         push!(td3.stats["noise"], noise)
         push!(td3.stats["lr"], A_optim[2].eta)
         push!(td3.stats["a_norm"], a_norm / max_ep_len)
-        
+        !(wandb_lg isa Nothing) && wandb_log_dict(
+            wandb_lg, td3.stats, wandb_pref)
+
         if (ep_idx % eval_every == 0) && !(isnothing(eval_env))
             move(td3, true, false)
             res = simulate!(eval_env, order_action=order_action, step_=step_, kwargs=td3)
@@ -387,6 +393,7 @@ function order_action(
     orders = compose_orders(
         model   = td3,
         actions = action_idx,
+        state   = state,
         mid_px = mid_px
     )
     for n in orders
@@ -401,7 +408,8 @@ function train!(
     td3::TD3, 
     train_env::Env,
     test_env:: Union{Env,Nothing},
-    save_path::String
+    save_path::String,
+    wandb_lg::Union{WandbLogger, Nothing}
 )
     eval_res = train_td3(
         td3,
@@ -433,7 +441,9 @@ function train!(
         t_beta = c["t_beta"],
         save_every = c["save_every"],
         save_path_pref = save_path,
-        reg_weights = T(c["reg_weights"])
+        reg_weights = T(c["reg_weights"]),
+        wandb_lg         = wandb_lg,
+        wandb_pref       = get_wandb_pref(c["eval_save_path_pref"])
     )
 
     return eval_res

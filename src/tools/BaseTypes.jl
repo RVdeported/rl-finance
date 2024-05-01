@@ -1,12 +1,14 @@
 # using Pkg
 # Pkg.activate("../alp")
+using Wandb, DataFrames
+
 EPS = 1e-8
 
 abstract type RLModel end
 abstract type StatAlgo end
 abstract type Env_p end
 
-@enum ActionType spread OU AS
+@enum ActionType spread OU AS grid
 
 T = Float32
 
@@ -91,15 +93,19 @@ thr(eps_start::AbstractFloat,
 
 
 #------------ General function for stat algorithms -------------------------#
-function compose_order_stat_algo(model::RLModel, algo::StatAlgo, bias...)
+function compose_order_stat_algo(model::RLModel, algo::StatAlgo, state::DataFrameRow, bias...)
     orders = []
-    quotes = quote_(algo, model.env, bias...) 
+    quotes = quote_(algo, state::DataFrameRow, bias...) 
+
+    if (abs(quotes[1] - quotes[2]) < EPS)
+        return orders
+    end
 
     # TODO: make qty from config
     (quotes[1] > EPS) && push!(orders, Order(true,  1.0, quotes[1]))
     (quotes[2] > EPS) && push!(orders, Order(false, 1.0, quotes[2]))
 
-    (quotes[1] > EPS || quotes[1] > EPS) && print("Quoting $(quotes[1])...$(quotes[2])\n")
+    # (quotes[1] > EPS || quotes[1] > EPS) && print("Quoting $(quotes[1])...$(quotes[2])\n")
 
     return orders
 end
@@ -107,16 +113,16 @@ end
 #-----------------------------------------------------------------------------#
 # Compose discrete order variations                                           #
 #-----------------------------------------------------------------------------#
-function compose_orders(model::RLModel, action_idx::Int, mid_px::T)
+function compose_orders(model::RLModel, action_idx::Int, state::DataFrameRow, mid_px::T)
     #TODO: replace with type distribution
     if      model.action_type == spread
-        return compose_orders_spread(model, action_idx, mid_px)
+        return compose_orders_spread(model, action_idx, state, mid_px)
     else
-        return compose_orders_stat(model, action_idx, mid_px)
+        return compose_orders_stat(model, action_idx, state, mid_px)
     end
 end
 
-function compose_orders_spread(model::RLModel, action_idx::Int, mid_px::T)
+function compose_orders_spread(model::RLModel, action_idx::Int, state::DataFrameRow, mid_px::T)
     orders = []
     qt1 = model.action_space[action_idx][1]
     qt2 = model.action_space[action_idx][2]
@@ -130,10 +136,10 @@ function compose_orders_spread(model::RLModel, action_idx::Int, mid_px::T)
     return orders
 end
 
-function compose_orders_stat(model::RLModel, action_idx::Int, mid_px::T)
+function compose_orders_stat(model::RLModel, action_idx::Int, state::DataFrameRow, mid_px::T)
     # here it is asserted that action space is of lenght 3
     ou_bias   = model.action_space[action_idx]
-    return compose_order_stat_algo(model, model.stat_algo, ou_bias...)
+    return compose_order_stat_algo(model, model.stat_algo, state, ou_bias...)
 end
 
 #-----------------------------------------------------------------------------#
@@ -142,33 +148,35 @@ end
 function compose_orders(;
     model::RLModel,
     actions::Vector{T},
+    state::DataFrameRow,
     mid_px::AbstractFloat,
-    assert_both::Bool = true,
+    assert_both::Bool = false,
     instr_id::Int8 = Int8(1)
 )
-    args = [model, actions, mid_px, assert_both, instr_id]
+    args = [model, actions, state, mid_px, assert_both, instr_id]
 
     if      model.action_type == spread
         return compose_orders_spread(args...)
     else
-        return compose_order_stat_algo(model, model.stat_algo, actions...)
+        return compose_order_stat_algo(model, model.stat_algo, state, actions...)
     end
 end
 
 function compose_orders_spread(
     model::RLModel,
     actions::Vector{T},
+    state::DataFrameRow,
     mid_px::AbstractFloat,
-    assert_both::Bool = true,
+    assert_both::Bool = false,
     instr_id::Int8 = Int8(1)
 )
     orders = []
-    sell_viable = (actions[1] > EPS)
-    buy_viable =  (actions[2] > EPS)
+    sell_viable = (actions[1] > EPS) && (actions[1] < 9.0)
+    buy_viable =  (actions[2] > EPS) && (actions[2] < 9.0)
 
     assert_both && (!sell_viable || !buy_viable) && return []
-    sell_viable && push!(orders, Order(true, 1.0,  mid_px + actions[1]))
-    buy_viable &&  push!(orders, Order(false, 1.0, max(mid_px - actions[2], EPS)))
+    sell_viable && push!(orders, Order(true, 1.0,  mid_px * (1 + actions[1] / 10)))
+    buy_viable &&  push!(orders, Order(false, 1.0, mid_px * (1 - actions[2] / 10)))
 
     return orders
 end
@@ -176,11 +184,12 @@ end
 function compose_orders_stat(    
     model::RLModel,
     actions::Vector{T},
+    state::DataFrameRow,
     mid_px::AbstractFloat,
     assert_both::Bool = true,
     instr_id::Int8 = Int8(1)
 )
-    return compose_order_stat_algo(model, model.stat_algo, actions...)
+    return compose_order_stat_algo(model, model.stat_algo, state, actions...)
 end
 
 #--------------------------------------------#
@@ -217,12 +226,31 @@ mutable struct Run
     config::Dict
 end
 
-function train!(
-    c::Dict,
-    model::RLModel, 
-    train_env::Env_p,
-    test_env:: Union{Env_p,Nothing},
-    save_path::String
+function wandb_log_dict(
+    wandb_logger::WandbLogger,
+    stats::Dict{String, Vector},
+    item_prefix::String = ""
 )
-    throw(error("Train sequence not introduced for required model $(typeof(model))"))
+    report = Dict()
+    for key in keys(stats)
+        (length(stats[key]) == 0) && return
+        report[item_prefix * key] = stats[key][end]
+    end
+
+    begin
+        lk = ReentrantLock()
+        lock(lk)
+        try
+            Wandb.log(wandb_logger, report)
+        finally
+            unlock(lk)
+        end
+    end
+
+    
+
+end
+
+function get_wandb_pref(s::String)
+    return s[findall("/", s)[end-1][end]+1:end]
 end

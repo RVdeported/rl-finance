@@ -30,6 +30,7 @@ function set_mode_actions(c::Dict, discr::Bool)
         "spread" => spread
         "ou"     => OU
         "as"     => AS
+        "grid"   => grid
     end
 
     stat_algo = nothing
@@ -59,6 +60,14 @@ function set_mode_actions(c::Dict, discr::Bool)
         else
             actions     = 2
         end
+    elseif mode == grid
+        stat_algo = init_gr!(c)
+        if (discr)
+            actions   = [Iterators.product(T.(
+                c["gr_pred_px_deltas"]), T.(c["gr_deltas"]), T.(c["gr_target_prs"]))...]
+        else
+            actions   = 1
+        end
     end
 
     return stat_algo, actions, mode
@@ -68,7 +77,7 @@ end
 function set_model(
     c::Dict, 
     train_env::Env, 
-    actions::Union{Int, Vector{Any}},
+    actions::Union{Int, Vector},
     stat_algo::Union{Nothing, StatAlgo},
     mode::ActionType
 )
@@ -102,14 +111,14 @@ function set_model(
     return model
 end
 
-function launch(c::Dict)
+function launch(c::Dict, wandb_lg::Union{WandbLogger, Nothing} = nothing)
     train_env, test_env = set_envs(c)
 
     discr_act = c["type"] == "dqn"
     stat_algo, actions, mode = set_mode_actions(c, discr_act)
     model = set_model(c, train_env, actions, stat_algo, mode)
 
-    eval_res = train!(c, model, train_env, test_env, c["eval_save_path_pref"])
+    eval_res = train!(c, model, train_env, test_env, c["eval_save_path_pref"], wandb_lg)
 
     res = Dict("eval" => eval_res, "model" => model, "config" => c)
     return res

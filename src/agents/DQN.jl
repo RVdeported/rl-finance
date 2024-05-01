@@ -14,11 +14,10 @@ using Base
 mutable struct DQN <: RLModel
     target_model ::Ref{Chain}
     predict_model::Ref{Chain}
-    action_space ::Vector{Any} # buy and sell offset
+    action_space ::Vector # buy and sell offset
     stats        ::Dict{String, Vector}
     action_type  ::ActionType
     stat_algo    ::Union{Nothing, StatAlgo}    
-    env          ::Union{Nothing, Env}       
 end
 
 
@@ -26,7 +25,7 @@ function init!(;
     in_feats::Int64,
     out_feats::Int64,
     layers::Vector{Int64},
-    action_space::Vector{Any},
+    action_space::Vector,
     activation::Function = relu,
     action_type::ActionType = spread,
     stat_algo::Union{Nothing, StatAlgo} = nothing,
@@ -52,7 +51,6 @@ function init!(;
         ),
         action_type,
         stat_algo,
-        nothing
     )
     return dqn
 end
@@ -62,7 +60,9 @@ function move(dqn::DQN, target_gpu::Bool, predict_gpu::Bool)
     dqn.target_model[] = fmap(target_gpu ? cu : cpu,  dqn.target_model[])
 end
 
-
+function move_pr(dqn::DQN, gpu::Bool)
+    move(dqn, false, gpu)
+end
 
 function train_dqn(
     dqn::DQN,
@@ -79,7 +79,7 @@ function train_dqn(
     merge_soft::Bool = true,
     merge_alpha::T = T(0.5),
     eval_every::Int = 100,
-    eval_env::Env = nothing,
+    eval_env::Union{Env, Nothing} = nothing,
     lr_decay::AbstractFloat = 0.95,
     gradient_clip::AbstractFloat = 1e-3,
     eps_start::AbstractFloat = 0.05,
@@ -91,11 +91,14 @@ function train_dqn(
     save_every = -1,
     save_path_pref = "./dqn",
     one_pass::Bool = false,
-    replay_memory::Vector{Tuple{Int, Int, Int, T, Vector{T}, Vector{T}, T}} = Vector{Tuple{Int, Int, Int, T, Vector{T}, Vector{T}, T}}()
+    replay_memory::Vector{Tuple{Int, Int, Int, T, Vector{T}, Vector{T}, T}} = Vector{Tuple{Int, Int, Int, T, Vector{T}, Vector{T}, T}}(),
+    wandb_lg::Union{WandbLogger, Nothing} = nothing,
+    wandb_pref::String = ""
 )
+    mkpath(save_path_pref)
+
     add_rm(x) = (length(replay_memory) >= replay_memory_len) ? (popfirst!(replay_memory); push!(replay_memory, x)) : push!(replay_memory, x)
     eval_res = []
-    dqn.env = env
     move(dqn, false, true)
 
     optim = Flux.Optimise.Optimiser(ClipValue(gradient_clip), ADAM(lr))
@@ -136,7 +139,7 @@ function train_dqn(
             global_step += 1
             (action_idx == 1) && (zero_count += 1)
 
-            orders = compose_orders(dqn, action_idx, mid_px)
+            orders = compose_orders(dqn, action_idx, state_orig, mid_px)
             
             for n in orders
                 input_order(env, n)
@@ -177,12 +180,14 @@ function train_dqn(
             reg_vol = reg_vol
         )
         optim[2].eta *= lr_decay
-        push!(dqn.stats["reward"], avg_reward)
-        push!(dqn.stats["loss"], loss)
+        push!(dqn.stats["reward"]    , avg_reward)
+        push!(dqn.stats["loss"]      , loss)
         push!(dqn.stats["no_actions"], zero_count)
-        push!(dqn.stats["vol_left"], vol_left)
-        push!(dqn.stats["randoms"], random_count)
-        push!(dqn.stats["lr"], optim[2].eta)
+        push!(dqn.stats["vol_left"]  , vol_left)
+        push!(dqn.stats["randoms"]   , random_count)
+        push!(dqn.stats["lr"]        , optim[2].eta)
+        !(wandb_lg isa Nothing) && wandb_log_dict(
+            wandb_lg, dqn.stats, wandb_pref)
         
         if !merge_soft
             (ep_idx % merge_every == 0) && (dqn.target_model[] = deepcopy(dqn.predict_model[]))
@@ -303,13 +308,12 @@ function order_action(
     env::Env,
     dqn::DQN
 )
-    dqn.env = env
     state = get_state(env)
     scaled_state = get_state(env, true)
     mid_px = state.midprice
     scaled_state = cu([scaled_state...])
     action_idx = argmax(cpu(dqn.predict_model[](scaled_state)))
-    orders = compose_orders(dqn, action_idx, mid_px)
+    orders = compose_orders(dqn, action_idx, state, mid_px)
     for n in orders
         # display(n)
         input_order(env, n)
@@ -321,14 +325,53 @@ function random_action(
     env::Env,
     dqn::DQN
 )
-    dqn.env = env
     state = get_state(env)
     mid_px = state.midprice
     action_idx = Int64(round(rand() * (length(dqn.action_space) - 1)) + 1)
-    orders = compose_orders(dqn, action_idx, mid_px)
+    orders = compose_orders(dqn, action_idx, state, mid_px)
     for n in orders
         # display(n)
         input_order(env, n)
     end
 end
 
+function train!(
+    c::Dict,
+    dqn::DQN, 
+    train_env::Env,
+    test_env:: Union{Env,Nothing},
+    save_path::String,
+    wandb_lg::Union{WandbLogger, Nothing}
+)
+    eval_res = train_dqn(
+        dqn,
+        train_env;
+        episodes         = c["episodes"],
+        max_ep_len       = c["max_episode_len"],
+        step_            = c["window_step"],
+        replay_memory_len= c["replay_memory_len"],
+        replay_batch     = c["replay_batch"],     
+        warm_up_episodes = c["warm_up_episodes"],
+        alpha            = T(c["alpha"]),
+        gamma            = T(c["gamma"]),
+        eval_every       = c["eval_every"],
+        eval_env         = test_env,
+        lr_decay         = c["lr_decay"],
+        merge_every      = c["merge_dqns_every"],
+        merge_soft       = Bool(c["merge_soft"]),
+        merge_alpha      = T(c["merge_alpha"]),
+        gradient_clip    = c["gradient_clip"],
+        eps_start        = c["eps_start"],
+        eps_end          = c["eps_end"],
+        eps_decay        = c["eps_decay"],
+        rew_decay        = c["reward_decay"],
+        lr               = c["lr"],
+        reg_vol          = T(c["reg_vol"]),
+        save_every       = c["save_every"],
+        save_path_pref   = save_path,
+        wandb_lg         = wandb_lg,
+        wandb_pref       = get_wandb_pref(c["eval_save_path_pref"])
+    )
+
+    return eval_res
+end
