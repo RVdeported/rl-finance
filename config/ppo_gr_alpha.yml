@@ -1,0 +1,61 @@
+#--------------general settings-----------------
+path_df:              /home/ugrek/Maquette/data/TEST_features.csv
+eval_save_path_pref:  /media/ugrek/Backup/rl-finance/ppo_gr_alpha/
+train_start_idx: 5000
+train_end_idx:   4500000
+test_start_idx:  4600000
+test_end_idx:    4610000
+save_every:      1000
+type:            ppo
+
+#--------------model settings-----------------
+mode:           grid
+gr_delta:       0.003
+gr_target_pr:   0.005
+gr_max_qt:      13.0
+
+P_layers: 
+    - 512
+    - 64
+V_layers: 
+    - 1024
+    - 256
+    - 16
+
+# currently relu, tanh are supported, see BateTypes
+activation_f: tanh
+
+#--------------training settings-----------------
+#---episodes and replay buffer
+episodes:          1000
+eval_every:        2000
+max_episode_len:   100
+replay_memory_len: 1024
+replay_batch:      64
+replay_mini_batch: 32
+#---reward variables
+reg_vol:       10.0
+reg_action:    1e-1
+rew_offset:    5.0
+warm_up_episodes: 500
+reward_decay:  0.2
+#---learning rate
+lr:            1e-6
+lr_decay:      0.993
+gradient_clip: 1e-6
+policy_clip:   0.05
+#---loss settings
+entropy_loss:  0.7
+value_loss:    0.8
+
+#--------------env settings-----------------
+need_to_scale: true
+trading_step:  300
+window_step:   299
+commission:   -0.0002
+exclude_cols:
+    - "mu"
+    - "theta"
+
+
+

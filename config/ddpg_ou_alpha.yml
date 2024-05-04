@@ -11,7 +11,7 @@ type:            ddpg
 #--------------model settings-----------------
 mode: ou
 mr_out_k:    0.4
-mr_in_k:     0.7
+mr_in_k:     0.8
 mr_crit_k:   5.0
 mr_pos_vol:  1.0
 mr_min_pr:   5 # in BPs!

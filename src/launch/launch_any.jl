@@ -106,6 +106,16 @@ function set_model(
                     action_type = mode,
                     stat_algo = stat_algo
                 )
+
+        "ppo"   => init_ppo!(
+                    in_feats        = length(train_env.feats_for_model),
+                    P_layers        = c["P_layers"],
+                    V_layers        = c["V_layers"],
+                    activation      = c["activation_f"],
+                    action_space    = actions,
+                    action_type     = mode,
+                    stat_algo       = stat_algo
+                )
     end
 
     return model

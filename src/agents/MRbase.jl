@@ -50,8 +50,6 @@ function quote_(
     mid_px = mr_params.use_VWAP ? state.VWAP : state.midprice
     vol    = state.Vol 
 
-
-
     # OU params 
     theta = state.mean  + theta_bias
     kappa = (state.kappa + kappa_bias) * mr_params.kappa_coef
@@ -92,8 +90,9 @@ function quote_(
         # check if spread too small
         (abs(px - px_pass) / px < mr_params.min_pr) && return res
         
-        res[1] = !buy ? px_pass : px
-        res[2] =  buy ? px_pass : px
+        res[1] =  buy ? px_pass : px
+        res[2] = !buy ? px_pass : px
+
     end
 
     return res

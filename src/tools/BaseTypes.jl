@@ -1,6 +1,6 @@
 # using Pkg
 # Pkg.activate("../alp")
-using Wandb, DataFrames
+using Wandb, DataFrames, Match
 
 EPS = 1e-8
 
@@ -178,6 +178,9 @@ function compose_orders_spread(
     sell_viable && push!(orders, Order(true, 1.0,  mid_px * (1 + actions[1] / 10)))
     buy_viable &&  push!(orders, Order(false, 1.0, mid_px * (1 - actions[2] / 10)))
 
+    # sell_viable && println("Selling $(mid_px * (1 + actions[1] / 10))")
+    # buy_viable && println("Buying   $(mid_px * (1 - actions[2] / 10))")
+
     return orders
 end
 
@@ -253,4 +256,21 @@ end
 
 function get_wandb_pref(s::String)
     return s[findall("/", s)[end-1][end]+1:end]
+end
+
+function sharpe(input::Vector, base = 65000.0)
+    ret = input .* 0.0
+    for i in eachindex(ret[2:end])
+        ret[i+1] = ret[i] + input[i] / base
+    end
+    ret[end] / std(input ./ base)
+end
+
+
+function get_activation_f(act_name::String)
+    return @match act_name begin
+            "relu" => Flux.relu
+            "tanh" => Flux.tanh
+        end
+    
 end

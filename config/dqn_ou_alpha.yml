@@ -12,7 +12,7 @@ type:            dqn
 # modes: spread, ou, as
 mode:        ou
 mr_out_k:    0.4
-mr_in_k:     0.7
+mr_in_k:     0.8
 mr_crit_k:   5.0
 mr_pos_vol:  1.0
 mr_min_pr:   5 # in BPs!
@@ -49,7 +49,7 @@ eps_decay:     500000
 #---reward variables
 reward_decay:     0.6
 reg_vol:          5.0
-warm_up_episodes: 1000
+warm_up_episodes: 500
 #--- Q calculation: Qp + alpha * (R + gamma * Qt' - Qp)
 alpha:         0.3
 gamma:         0.5

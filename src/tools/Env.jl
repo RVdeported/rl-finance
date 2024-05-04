@@ -371,6 +371,10 @@ function simulate_live!(
     config::Dict,
     wandb_lg::Union{WandbLogger, Nothing} = nothing
 )
+    config["episodes"] = Int(round(
+        (env.end_idx - env.start_idx) / config["window_step"] / config["max_episode_len"]
+        , RoundDown
+    )) 
     return simulate!(
         env, 
         order_action = order_action, 

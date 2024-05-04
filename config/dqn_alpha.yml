@@ -3,8 +3,8 @@ path_df: /home/ugrek/Maquette/data/TEST_features.csv
 eval_save_path_pref:  /media/ugrek/Backup/rl-finance/dqn_alpha/
 train_start_idx: 5000
 train_end_idx:   4500000
-test_start_idx:  4600000
-test_end_idx:    4700000
+test_start_idx:  3500000
+test_end_idx:    5150000
 save_every:      2000
 type:            dqn
 

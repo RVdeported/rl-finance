@@ -1,6 +1,6 @@
 #--------------general settings-----------------
 path_df:              /home/ugrek/Maquette/data/TEST_features.csv
-eval_save_path_pref:  /media/ugrek/Backup/rl-finance/ddpg_alpha/
+eval_save_path_pref:  /media/ugrek/Backup/rl-finance/ddpg_gamma/
 train_start_idx: 5000
 train_end_idx:   4500000
 test_start_idx:  4600000
@@ -25,7 +25,7 @@ episodes:          1000
 eval_every:        2000
 max_episode_len:   100
 replay_memory_len: 1024
-replay_batch:      64
+replay_batch:      128
 #---EvE variables
 eps_start:     0.70
 eps_end:       0.05
@@ -36,19 +36,19 @@ noise_mean:    0.0
 reg_vol:       10.0
 reg_action:    1e-1
 rew_offset:    5.0
-warm_up_episodes: 500
+warm_up_episodes: 200
 reward_decay:  0.2
 #--- Q calculation: Qp + alpha * (R + gamma * Qt' - Qp)
-alpha:         0.2
-gamma:         0.7
+alpha:         0.7
+gamma:         0.8
 #---learning rate
 lr_A:          1e-5
-lr_C:          1e-8
+lr_C:          1e-9
 lr_decay_A:    0.995
 lr_decay_C:    0.993
-gradient_clip: 1e-7
+gradient_clip: 1e-8
 #---target update settings
-t_beta:        0.5
+t_beta:        0.4
 
 #--------------env settings-----------------
 need_to_scale: true
