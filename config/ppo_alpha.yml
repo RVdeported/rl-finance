@@ -37,9 +37,9 @@ rew_offset:    5.0
 warm_up_episodes: 500
 reward_decay:  0.2
 #---learning rate
-lr:            1e-6
+lr:            1e-8
 lr_decay:      0.993
-gradient_clip: 1e-6
+gradient_clip: 1e-8
 policy_clip:   0.05
 #---loss settings
 entropy_loss:  0.7

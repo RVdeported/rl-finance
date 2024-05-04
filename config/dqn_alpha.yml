@@ -20,6 +20,8 @@ layers:
     - 256
     - 128
 
+# currently relu, tanh are supported, see BateTypes
+activation_f: tanh
 
 #--------------training settings-----------------
 #---episodes and replay buffer

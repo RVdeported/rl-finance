@@ -25,12 +25,14 @@ function init_ddpg!(;
     in_feats::Int64,
     A_layers::Vector{Int64},
     C_layers::Vector{Int64},
+    activation::String  = "relu", # also tanh availabel
     action_space::Int = 2,    
     action_type::ActionType = spread,
     stat_algo::Union{Nothing, StatAlgo} = nothing,
 )
-    A = make_chain(A_layers, in_feats, action_space, Flux.relu)
-    C = make_chain(C_layers, in_feats + action_space, 1, Flux.relu)
+    act_f = get_activation_f(activation)
+    A = make_chain(A_layers, in_feats, action_space,     act_f)
+    C = make_chain(C_layers, in_feats + action_space, 1, act_f)
     
     ddpg = DDPG(
         A,

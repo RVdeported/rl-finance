@@ -25,12 +25,13 @@ function init!(;
     in_feats::Int64,
     out_feats::Int64,
     layers::Vector{Int64},
+    activation::String  = "relu", # also tanh availabel,
     action_space::Vector,
-    activation::Function = relu,
     action_type::ActionType = spread,
     stat_algo::Union{Nothing, StatAlgo} = nothing,
 )
-    model = make_chain(layers, in_feats, out_feats, activation)
+    act_f = get_activation_f(activation)
+    model = make_chain(layers, in_feats, out_feats, act_f)
     
     @assert(action_type == spread || !isnothing(MRbase))
     @assert(action_type != OU     || (length(action_space[1]) == 3 && stat_algo isa MRbase))

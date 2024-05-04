@@ -86,6 +86,7 @@ function set_model(
                     in_feats     = length(train_env.feats_for_model),
                     out_feats    = length(actions),
                     layers       = c["layers"],
+                    activation      = c["activation_f"],
                     action_space = actions,
                     stat_algo    = stat_algo,
                     action_type  = mode
@@ -94,6 +95,7 @@ function set_model(
                     in_feats = length(train_env.feats_for_model),
                     A_layers = c["A_layers"],
                     C_layers = c["C_layers"],
+                    activation      = c["activation_f"],
                     action_space = actions,
                     action_type = mode,
                     stat_algo = stat_algo
@@ -102,6 +104,7 @@ function set_model(
                     in_feats = length(train_env.feats_for_model),
                     A_layers = c["A_layers"],
                     C_layers = c["C_layers"],
+                    activation      = c["activation_f"],
                     action_space = actions,
                     action_type = mode,
                     stat_algo = stat_algo
